@@ -5,4 +5,4 @@ const isLocal = window.location.hostname === "localhost";
 // REPLACE 'https://your-backend-url.onrender.com' LATER after Phase 2
 export const API_URL = isLocal
     ? "http://localhost:5000"
-    : "https://your-backend-name.onrender.com";
+    : "https://nxtverse-backend.onrender.com";
