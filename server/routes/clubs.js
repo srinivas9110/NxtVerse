@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const fetchuser = require('../middleware/fetchuser');
+const fetchUser = require('../middleware/fetchUser');
 const Club = require('../models/Club');
 const ClubPost = require('../models/ClubPost');
 const Workshop = require('../models/Workshop');
@@ -20,7 +20,7 @@ const getMediaType = (url) => {
 // ==========================================
 
 // Get All Clubs (Populated for Cards)
-router.get('/fetchall', fetchuser, async (req, res) => {
+router.get('/fetchall', fetchUser, async (req, res) => {
     try {
         const clubs = await Club.find()
             .populate('president', 'fullName profilePic')
@@ -33,7 +33,7 @@ router.get('/fetchall', fetchuser, async (req, res) => {
 });
 
 // Create Club
-router.post('/create', fetchuser, async (req, res) => {
+router.post('/create', fetchUser, async (req, res) => {
     try {
         const { name, description, category, logo, videoUrl } = req.body;
         const club = new Club({
@@ -52,7 +52,7 @@ router.post('/create', fetchuser, async (req, res) => {
 // ==========================================
 
 // 🟢 FIX: Update Club Details (Banner Video)
-router.put('/update/:id', fetchuser, async (req, res) => {
+router.put('/update/:id', fetchUser, async (req, res) => {
     try {
         if (req.user.role !== 'faculty') return res.status(403).send("Access Denied");
 
@@ -70,7 +70,7 @@ router.put('/update/:id', fetchuser, async (req, res) => {
 });
 
 // 🟢 FIX: Assign President (By Email - Matching your Clubs.jsx)
-router.post('/assign-president', fetchuser, async (req, res) => {
+router.post('/assign-president', fetchUser, async (req, res) => {
     try {
         if (req.user.role !== 'faculty') return res.status(403).send("Faculty Only");
 
@@ -90,7 +90,7 @@ router.post('/assign-president', fetchuser, async (req, res) => {
 });
 
 // 🟢 FIX: Remove President
-router.put('/remove-president', fetchuser, async (req, res) => {
+router.put('/remove-president', fetchUser, async (req, res) => {
     try {
         if (req.user.role !== 'faculty') return res.status(403).send("Faculty Only");
 
@@ -109,7 +109,7 @@ router.put('/remove-president', fetchuser, async (req, res) => {
 // ==========================================
 
 // Get Single Club (With Dashboard Data)
-router.get('/:id', fetchuser, async (req, res) => {
+router.get('/:id', fetchUser, async (req, res) => {
     try {
         const club = await Club.findById(req.params.id)
             .populate('admin', 'fullName')
@@ -131,7 +131,7 @@ router.get('/:id', fetchuser, async (req, res) => {
 // ==========================================
 
 // Assign Organizer (Block Self-Assignment)
-router.put('/workshop/:id/organizer', fetchuser, async (req, res) => {
+router.put('/workshop/:id/organizer', fetchUser, async (req, res) => {
     try {
         const { studentId } = req.body;
         // Block assigning yourself
@@ -156,7 +156,7 @@ router.put('/workshop/:id/organizer', fetchuser, async (req, res) => {
 });
 
 // Mark Attendance
-router.put('/workshop/:id/attendance', fetchuser, async (req, res) => {
+router.put('/workshop/:id/attendance', fetchUser, async (req, res) => {
     try {
         const { studentId } = req.body;
         const workshop = await Workshop.findById(req.params.id);
@@ -174,7 +174,7 @@ router.put('/workshop/:id/attendance', fetchuser, async (req, res) => {
 });
 
 // Add Workshop
-router.post('/workshop/add', fetchuser, async (req, res) => {
+router.post('/workshop/add', fetchUser, async (req, res) => {
     try {
         const { title, date, time, venue, description, clubId } = req.body;
         const workshop = new Workshop({
@@ -187,7 +187,7 @@ router.post('/workshop/add', fetchuser, async (req, res) => {
 });
 
 // Delete Workshop
-router.delete('/workshop/:id', fetchuser, async (req, res) => {
+router.delete('/workshop/:id', fetchUser, async (req, res) => {
     try {
         await Workshop.findByIdAndDelete(req.params.id);
         res.json({ success: "Deleted" });
@@ -195,7 +195,7 @@ router.delete('/workshop/:id', fetchuser, async (req, res) => {
 });
 
 // Register
-router.post('/workshop/:id/register', fetchuser, async (req, res) => {
+router.post('/workshop/:id/register', fetchUser, async (req, res) => {
     try {
         const workshop = await Workshop.findById(req.params.id);
         if (workshop.attendees.some(a => a.user.toString() === req.user.id)) {
@@ -211,7 +211,7 @@ router.post('/workshop/:id/register', fetchuser, async (req, res) => {
 // 5. POSTS (Feed)
 // ==========================================
 
-router.get('/:id/posts', fetchuser, async (req, res) => {
+router.get('/:id/posts', fetchUser, async (req, res) => {
     try {
         const posts = await ClubPost.find({ club: req.params.id })
             .populate('postedBy', 'fullName')
@@ -220,7 +220,7 @@ router.get('/:id/posts', fetchuser, async (req, res) => {
     } catch (err) { res.status(500).send("Error"); }
 });
 
-router.post('/:id/post', fetchuser, async (req, res) => {
+router.post('/:id/post', fetchUser, async (req, res) => {
     try {
         const { caption, link } = req.body;
         const type = getMediaType(link);
@@ -240,7 +240,7 @@ cloudinary.config({
     api_secret: process.env.API_SECRET
 });
 
-router.delete('/post/:id', fetchuser, async (req, res) => {
+router.delete('/post/:id', fetchUser, async (req, res) => {
     try {
         // 1. Find the post first
         const post = await ClubPost.findById(req.params.id);
