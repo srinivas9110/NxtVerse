@@ -203,7 +203,7 @@ export default function Clubs() {
                                         <div className="group/pres relative cursor-pointer" title={`President: ${club.president.fullName}`}>
                                             <div className="w-24 h-24 rounded-full border-4 border-[#121214] bg-[#18181b] overflow-hidden shadow-xl">
                                                 {club.president.profilePic ? (
-                                                    <img src={`http://localhost:5000${club.president.profilePic}`} alt="Pres" className="w-full h-full object-cover" />
+                                                    <img src={`${API_URL}${club.president.profilePic}`} alt="Pres" className="w-full h-full object-cover" />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600 to-blue-600 text-2xl font-bold text-white">
                                                         {club.president.fullName?.charAt(0)}

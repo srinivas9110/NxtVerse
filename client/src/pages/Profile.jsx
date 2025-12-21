@@ -457,7 +457,7 @@ function EditModal({ formData, setFormData, onClose, onSave }) {
 
         try {
             console.log(`Uploading ${type}...`);
-            const res = await axios.post(`http://localhost:5000/api/users/upload/${type}`, data, {
+            const res = await axios.post(`${API_URL}/api/users/upload/${type}`, data, {
                 headers: { "auth-token": token, "Content-Type": "multipart/form-data" }
             });
 

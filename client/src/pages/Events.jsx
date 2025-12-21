@@ -164,10 +164,10 @@ export default function Events() {
             const token = localStorage.getItem('token');
             if (!token) { navigate('/login'); return; }
             try {
-                const userRes = await axios.get('http://localhost:5000/api/auth/getuser', { headers: { "auth-token": token } });
+                const userRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
                 setUser(userRes.data);
 
-                const eventRes = await axios.get('http://localhost:5000/api/events/fetchall', { headers: { "auth-token": token } });
+                const eventRes = await axios.get(`${API_URL}/api/events/fetchall`, { headers: { "auth-token": token } });
                 const sorted = eventRes.data.sort((a, b) => new Date(a.date) - new Date(b.date));
                 setEvents(sorted);
 
@@ -193,7 +193,7 @@ export default function Events() {
         e.preventDefault();
         try {
             const token = localStorage.getItem('token');
-            await axios.post('http://localhost:5000/api/events/add', newEvent, { headers: { "auth-token": token } });
+            await axios.post(`${API_URL}/api/events/add`, newEvent, { headers: { "auth-token": token } });
             window.location.reload();
         } catch (err) { alert("Signal Failed"); }
     };
@@ -201,7 +201,7 @@ export default function Events() {
     const handleRSVP = async (eventId) => {
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.put(`http://localhost:5000/api/events/rsvp/${eventId}`, {}, { headers: { "auth-token": token } });
+            const res = await axios.put(`${API_URL}/api/events/rsvp/${eventId}`, {}, { headers: { "auth-token": token } });
             const updatedEvents = events.map(e => e._id === eventId ? res.data : e);
             setEvents(updatedEvents);
             if (heroEvent && heroEvent._id === eventId) setHeroEvent(res.data);
@@ -212,7 +212,7 @@ export default function Events() {
         if (!window.confirm("Are you sure you want to delete this event?")) return;
         try {
             const token = localStorage.getItem('token');
-            await axios.delete(`http://localhost:5000/api/events/delete/${eventId}`, { headers: { "auth-token": token } });
+            await axios.delete(`${API_URL}/api/events/delete/${eventId}`, { headers: { "auth-token": token } });
             const filtered = events.filter(e => e._id !== eventId);
             setEvents(filtered);
             if (heroEvent._id === eventId) setHeroEvent(filtered[0] || null);

@@ -176,7 +176,7 @@ export default function Network() {
                                         <div className="w-24 h-24 rounded-full p-[2px] bg-gradient-to-b from-gray-700 to-gray-900 group-hover:from-indigo-500 group-hover:to-purple-600 transition-colors duration-500">
                                             <div className="w-full h-full rounded-full bg-[#111111] flex items-center justify-center overflow-hidden">
                                                 {user.profilePic ? (
-                                                    <img src={`http://localhost:5000${user.profilePic}`} className="w-full h-full object-cover" />
+                                                    <img src={`${API_URL}${user.profilePic}`} className="w-full h-full object-cover" />
                                                 ) : (
                                                     <span className="text-3xl font-bold text-gray-700 group-hover:text-white transition-colors">
                                                         {user.fullName.charAt(0)}

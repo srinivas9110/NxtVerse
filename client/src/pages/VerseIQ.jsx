@@ -85,7 +85,7 @@ export default function VerseIQ() {
             const token = localStorage.getItem('token');
             if (!token) { alert("Login required."); navigate('/login'); return; }
 
-            const response = await fetch('http://localhost:5000/api/verse-iq/ask', {
+            const response = await fetch(`${API_URL}/api/verse-iq/ask`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'auth-token': token },
                 body: JSON.stringify({ prompt: userMessage.text })
