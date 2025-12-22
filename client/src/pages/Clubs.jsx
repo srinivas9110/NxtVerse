@@ -4,7 +4,7 @@ import axios from 'axios';
 import {
     Search, Users, ChevronRight, Settings,
     Shield, UserPlus, Play, X, UserMinus, Crown,
-    Trash2, PlusCircle // 👈 Added PlusCircle icon
+    Trash2, PlusCircle, Image as ImageIcon // 👈 Added ImageIcon
 } from 'lucide-react';
 import YouTube from 'react-youtube';
 import { useNavigate, Link } from 'react-router-dom';
@@ -28,7 +28,7 @@ export default function Clubs() {
     // UI State
     const [hoveredClub, setHoveredClub] = useState(null);
     const [manageMode, setManageMode] = useState(null);
-    const [showCreateModal, setShowCreateModal] = useState(false); // 👈 New Modal State
+    const [showCreateModal, setShowCreateModal] = useState(false);
     const hoverTimeout = useRef(null);
 
     // New Club Form State
@@ -83,10 +83,13 @@ export default function Clubs() {
         e.preventDefault();
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/api/clubs/create`, newClub, { headers: { "auth-token": token } });
-            setClubs([...clubs, res.data]); // Add new club to list immediately
+            // Ensure logo is not undefined
+            const clubData = { ...newClub, logo: newClub.logo || "" };
+            
+            const res = await axios.post(`${API_URL}/api/clubs/create`, clubData, { headers: { "auth-token": token } });
+            setClubs([...clubs, res.data]); 
             setShowCreateModal(false);
-            setNewClub({ name: '', description: '', logo: '', videoUrl: '' }); // Reset form
+            setNewClub({ name: '', description: '', logo: '', videoUrl: '' }); 
             alert("🎉 Club Created Successfully!");
         } catch (err) {
             alert("Error creating club");
@@ -99,7 +102,7 @@ export default function Clubs() {
         try {
             const token = localStorage.getItem('token');
             await axios.delete(`${API_URL}/api/clubs/delete/${clubId}`, { headers: { "auth-token": token } });
-            setClubs(clubs.filter(c => c._id !== clubId)); // Remove from list immediately
+            setClubs(clubs.filter(c => c._id !== clubId)); 
             alert("🗑️ Club Deleted");
         } catch (err) {
             alert("Error deleting club");
@@ -309,7 +312,7 @@ export default function Clubs() {
                                                         <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center font-bold text-xs"><Crown size={14} /></div>
                                                         <div>
                                                             <p className="text-sm font-bold text-white">{club.president.fullName}</p>
-                                                            <p className="text-[10px] text-gray-500">Active</p>
+                                                            <p className="text-sm text-gray-500">Active</p>
                                                         </div>
                                                     </div>
                                                     <button onClick={() => handleRemovePresident(club._id)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full" title="Remove"><UserMinus size={16} /></button>
@@ -359,6 +362,21 @@ export default function Clubs() {
                                     onChange={(e) => setNewClub({ ...newClub, name: e.target.value })}
                                 />
                             </div>
+                            
+                            {/* 👇 NEW: LOGO URL INPUT */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-2">
+                                    <ImageIcon size={12} /> Club Logo (Image URL)
+                                </label>
+                                <input
+                                    type="text"
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-purple-500 outline-none transition-all"
+                                    placeholder="https://example.com/logo.png"
+                                    value={newClub.logo}
+                                    onChange={(e) => setNewClub({ ...newClub, logo: e.target.value })}
+                                />
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Description</label>
                                 <textarea
