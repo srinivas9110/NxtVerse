@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, RefreshCw, Cpu, Zap, Activity, Copy, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-
+import { API_URL } from '../config';
 // --- NEW IMPORTS FOR FORMATTING ---
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
