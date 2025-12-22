@@ -5,14 +5,21 @@ const mongoose = require('mongoose');
 
 // Import Route Files
 const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/users'); // Import users route nicely
+const userRoutes = require('./routes/users');
 
 dotenv.config();
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// ===========================================
+// ✅ FIX: ROBUST CORS CONFIGURATION
+// ===========================================
+app.use(cors({
+    origin: '*', // Allows Vercel frontend to connect
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'auth-token'] // 👈 CRITICAL: Allows VerseIQ to send the token
+}));
+
 app.use(express.json());
 
 // Database Connection
@@ -20,10 +27,9 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ MongoDB Connected Successfully"))
     .catch((err) => console.error("❌ MongoDB Connection Error:", err));
 
-
 // Routes Configuration
-app.use('/api/auth', authRoutes);  // For Signup, Login, Get User
-app.use('/api/users', userRoutes); // For fetching global network list
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/events', require('./routes/events'));
 app.use('/api/studyrooms', require('./routes/studyRooms'));
 app.use('/api/hackathons', require('./routes/hackathons'));
@@ -43,8 +49,7 @@ app.get('/api/health', (req, res) => {
     res.json({ message: "NxtVerse Backend Active", status: "OK" });
 });
 
-// ✅ CORRECT (Dynamic)
-const PORT = process.env.PORT || 5000; // Use Render's port, or 5000 locally
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
