@@ -6,7 +6,7 @@ import YouTube from 'react-youtube';
 import {
     Calendar, MapPin, Clock, Trash2, Plus, X,
     Send, Link as LinkIcon, ExternalLink, Image as ImageIcon,
-    Users, Shield, CheckCircle, Search, UserCheck
+    Users, Shield, CheckCircle, Search, UserCheck, ArrowLeft
 } from 'lucide-react';
 
 const getYoutubeId = (url) => {
@@ -18,6 +18,7 @@ const getYoutubeId = (url) => {
 
 export default function ClubDetails() {
     const { id } = useParams();
+    const navigate = useNavigate();
 
     // Data
     const [club, setClub] = useState(null);
@@ -90,7 +91,7 @@ export default function ClubDetails() {
     const handleRegister = async (workshopId) => {
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.post(` ${API_URL}/api/clubs/workshop/${workshopId}/register`, {}, { headers: { "auth-token": token } });
+            const res = await axios.post(`${API_URL}/api/clubs/workshop/${workshopId}/register`, {}, { headers: { "auth-token": token } });
             alert(res.data.message);
             window.location.reload();
         } catch (err) { alert("Error registering"); }
@@ -124,7 +125,6 @@ export default function ClubDetails() {
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        // Reset input to allow re-upload
         e.target.value = null;
 
         if (!file.type.startsWith('image/')) return alert("Upload only images directly. For videos, paste a link!");
@@ -163,7 +163,6 @@ export default function ClubDetails() {
 
     if (loading) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading Club HQ...</div>;
 
-    const bannerVideoId = getYoutubeId(club.videoUrl || 'https://www.youtube.com/watch?v=2i8s1c2j9Q0');
     // Roles
     const isPresident = user && club.president?._id === user._id;
     const isFaculty = user?.role === 'faculty';
@@ -171,19 +170,42 @@ export default function ClubDetails() {
     return (
         <div className="min-h-screen bg-[#050505] text-white font-sans">
 
-            {/* 1. HERO */}
-            <div className="w-full h-[50vh] relative overflow-hidden bg-black group">
-                <div className="absolute inset-0 pointer-events-none opacity-60 scale-[1.35]">
-                    <YouTube videoId={bannerVideoId} opts={{ height: '100%', width: '100%', playerVars: { autoplay: 1, controls: 0, mute: 1, loop: 1, playlist: bannerVideoId, showinfo: 0 } }} className="w-full h-full" />
+            {/* --- HERO HEADER (Restored "Big Letter" Design) --- */}
+            <div className="relative h-[400px] w-full overflow-hidden bg-black">
+                {/* Background Banner (Blurred) */}
+                <div className="absolute inset-0">
+                    <img 
+                        src={`https://img.youtube.com/vi/${club.videoUrl ? club.videoUrl.split('v=')[1] : '2i8s1c2j9Q0'}/hqdefault.jpg`} 
+                        className="w-full h-full object-cover opacity-30 blur-xl scale-110" 
+                        alt="bg"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/50 to-transparent" />
                 </div>
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/50 to-transparent"></div>
-                <div className="absolute bottom-0 w-full px-8 pb-10 flex items-end gap-6 z-20">
-                    <div className="w-24 h-24 bg-[#18181b] rounded-2xl p-4 border border-white/10 flex items-center justify-center">
-                        {club.logo ? <img src={club.logo} className="w-full h-full object-contain invert" alt="logo" /> : <span className="text-3xl font-bold text-purple-500">{club.name[0]}</span>}
-                    </div>
-                    <div className="flex-1">
-                        <h1 className="text-4xl md:text-5xl font-black mb-2">{club.name}</h1>
-                        <p className="text-gray-300 max-w-2xl">{club.description}</p>
+
+                <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col justify-end p-8 pb-12">
+                    <button onClick={() => navigate('/clubs')} className="absolute top-8 left-8 p-3 bg-black/50 backdrop-blur-md rounded-full hover:bg-white/10 text-white transition-all">
+                        <ArrowLeft size={20} />
+                    </button>
+
+                    <div className="flex flex-col md:flex-row items-end gap-8">
+                        {/* BIG LOGO BOX (The "R") */}
+                        <div className="w-32 h-32 md:w-40 md:h-40 bg-[#111] rounded-3xl border border-white/10 flex items-center justify-center shadow-2xl shrink-0 overflow-hidden">
+                            {club.logo ? (
+                                <img src={club.logo} className="w-full h-full object-cover" alt="Club Logo" />
+                            ) : (
+                                <span className="text-6xl md:text-7xl font-bold text-purple-500">
+                                    {club.name.charAt(0)}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Title & Description */}
+                        <div className="mb-2">
+                            <h1 className="text-4xl md:text-6xl font-bold text-white mb-4 tracking-tight">{club.name}</h1>
+                            <p className="text-gray-300 text-lg max-w-2xl leading-relaxed">
+                                {club.description || "Building the future of technology, one project at a time."}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -226,7 +248,7 @@ export default function ClubDetails() {
                             const isOrganizer = user && (isFaculty || isPresident || workshop.organizers?.some(o => o._id === user._id));
 
                             return (
-                                <div key={workshop._id} className="bg-[#121214] border border-white/5 p-6 rounded-3xl flex flex-col md:flex-row gap-6 relative overflow-hidden group">
+                                <div key={workshop._id} className="bg-[#121214] border border-white/5 p-6 rounded-3xl flex flex-col md:flex-row gap-6 relative overflow-hidden group hover:border-purple-500/30 transition-all">
 
                                     {/* DELETE BUTTON */}
                                     {(isFaculty || isPresident) && (
@@ -329,7 +351,7 @@ export default function ClubDetails() {
                 )}
             </div>
 
-            {/* --- DASHBOARD MODAL (EXACT REPLICA) --- */}
+            {/* --- DASHBOARD MODAL --- */}
             {dashboardModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
                     <div className="bg-[#09090b] border border-white/10 w-full max-w-2xl h-[80vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden">
