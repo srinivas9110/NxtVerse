@@ -4,7 +4,7 @@ import axios from 'axios';
 import {
     Search, Users, ChevronRight, Settings,
     Shield, UserPlus, Play, X, UserMinus, Crown,
-    Trash2 // 👈 Added this missing icon
+    Trash2, PlusCircle // 👈 Added PlusCircle icon
 } from 'lucide-react';
 import YouTube from 'react-youtube';
 import { useNavigate, Link } from 'react-router-dom';
@@ -28,7 +28,11 @@ export default function Clubs() {
     // UI State
     const [hoveredClub, setHoveredClub] = useState(null);
     const [manageMode, setManageMode] = useState(null);
+    const [showCreateModal, setShowCreateModal] = useState(false); // 👈 New Modal State
     const hoverTimeout = useRef(null);
+
+    // New Club Form State
+    const [newClub, setNewClub] = useState({ name: '', description: '', logo: '', videoUrl: '' });
 
     // Management State
     const [studentSearchTerm, setStudentSearchTerm] = useState('');
@@ -72,7 +76,36 @@ export default function Clubs() {
         }
     }, [studentSearchTerm, manageMode]);
 
-    // Hover Logic
+    // --- ACTIONS ---
+
+    // 1. Create Club Function
+    const handleCreateClub = async (e) => {
+        e.preventDefault();
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/api/clubs/create`, newClub, { headers: { "auth-token": token } });
+            setClubs([...clubs, res.data]); // Add new club to list immediately
+            setShowCreateModal(false);
+            setNewClub({ name: '', description: '', logo: '', videoUrl: '' }); // Reset form
+            alert("🎉 Club Created Successfully!");
+        } catch (err) {
+            alert("Error creating club");
+        }
+    };
+
+    // 2. Delete Club Function
+    const handleDeleteClub = async (clubId) => {
+        if (!window.confirm("⚠️ Are you sure you want to delete this club? This action cannot be undone.")) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`${API_URL}/api/clubs/delete/${clubId}`, { headers: { "auth-token": token } });
+            setClubs(clubs.filter(c => c._id !== clubId)); // Remove from list immediately
+            alert("🗑️ Club Deleted");
+        } catch (err) {
+            alert("Error deleting club");
+        }
+    };
+
     const handleMouseEnter = (clubId) => {
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
         hoverTimeout.current = setTimeout(() => setHoveredClub(clubId), 200);
@@ -85,27 +118,19 @@ export default function Clubs() {
 
     const handleRemoveVideo = async (clubId) => {
         if (!window.confirm("Remove the video banner? It will revert to the default theme.")) return;
-
-        // Stop playback immediately
         setHoveredClub(null);
-
         try {
             const token = localStorage.getItem('token');
-            // Send EMPTY string to clear it
             await axios.put(`${API_URL}/api/clubs/update/${clubId}`,
                 { videoUrl: "" },
                 { headers: { "auth-token": token } }
             );
-
-            // Reset UI to default video
             const defaultVideo = 'https://www.youtube.com/watch?v=2i8s1c2j9Q0';
             setClubs(clubs.map(c => c._id === clubId ? { ...c, videoUrl: defaultVideo } : c));
-
             alert("✅ Video removed (Reverted to Default)");
         } catch (err) { alert("Failed to remove video."); }
     };
 
-    // Actions
     const handleAssignPresident = async (clubId, studentEmail) => {
         try {
             const token = localStorage.getItem('token');
@@ -129,7 +154,6 @@ export default function Clubs() {
         const newUrl = prompt("Enter new YouTube URL for Club Banner:");
         if (!newUrl) return;
         if (!getYoutubeId(newUrl)) { alert("❌ Invalid YouTube URL."); return; }
-
         try {
             const token = localStorage.getItem('token');
             await axios.put(`${API_URL}/api/clubs/update/${clubId}`, { videoUrl: newUrl }, { headers: { "auth-token": token } });
@@ -142,10 +166,30 @@ export default function Clubs() {
 
     return (
         <div className="min-h-screen bg-[#09090b] text-white p-6 md:p-12">
-            <div className="max-w-7xl mx-auto mb-12">
-                <h1 className="text-4xl font-bold mb-2">Student Clubs</h1>
-                <p className="text-gray-400">Join a community. Lead a movement.</p>
+            <div className="max-w-7xl mx-auto mb-12 flex justify-between items-end">
+                <div>
+                    <h1 className="text-4xl font-bold mb-2">Student Clubs</h1>
+                    <p className="text-gray-400">Join a community. Lead a movement.</p>
+                </div>
+
+                {/* CREATE CLUB BUTTON (Visible to Faculty Only) */}
+                {user?.role === 'faculty' && (
+                    <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-purple-900/20"
+                    >
+                        <PlusCircle size={20} /> Create New Club
+                    </button>
+                )}
             </div>
+
+            {/* EMPTY STATE */}
+            {clubs.length === 0 && (
+                <div className="text-center py-20 bg-white/5 rounded-3xl border border-white/10">
+                    <p className="text-xl text-gray-400">No clubs found.</p>
+                    {user?.role === 'faculty' && <p className="text-sm text-gray-500 mt-2">Click "Create New Club" to get started.</p>}
+                </div>
+            )}
 
             <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {clubs.map((club) => {
@@ -158,9 +202,19 @@ export default function Clubs() {
                             onMouseLeave={handleMouseLeave}
                             className="group relative bg-[#121214] border border-white/5 rounded-3xl overflow-hidden transition-all duration-500 hover:shadow-2xl hover:shadow-purple-900/20 hover:-translate-y-2 flex flex-col h-[480px]"
                         >
+                            {/* DELETE BUTTON (Top Left - Faculty Only) */}
+                            {user?.role === 'faculty' && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteClub(club._id); }}
+                                    className="absolute top-4 left-4 z-40 p-2 bg-red-500/80 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Delete Club"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            )}
+
                             {/* 1. MEDIA LAYER (Background) */}
                             <div className="relative h-[55%] overflow-hidden bg-black z-0">
-                                {/* Video Player - STRICTLY BACKGROUND */}
                                 {hoveredClub === club._id && manageMode !== club._id ? (
                                     <div className="absolute inset-0 w-[150%] h-[150%] -top-[25%] -left-[25%] pointer-events-none opacity-80">
                                         <YouTube
@@ -196,8 +250,7 @@ export default function Clubs() {
 
                             {/* 2. CONTENT LAYER (Foreground) */}
                             <div className="relative h-[45%] p-6 flex flex-col bg-[#121214] z-10">
-
-                                {/* President Badge - Now High Z-Index & Real Image */}
+                                {/* President Badge */}
                                 <div className="absolute -top-12 right-6 z-20">
                                     {club.president ? (
                                         <div className="group/pres relative cursor-pointer" title={`President: ${club.president.fullName}`}>
@@ -231,7 +284,7 @@ export default function Clubs() {
                                 </Link>
                             </div>
 
-                            {/* 3. ADMIN OVERLAY (Z-Index 50) */}
+                            {/* 3. ADMIN OVERLAY */}
                             {manageMode === club._id && (
                                 <div className="absolute inset-0 bg-[#09090b]/95 backdrop-blur-md z-50 p-6 flex flex-col animate-in slide-in-from-bottom duration-300">
                                     <div className="flex justify-between items-center mb-6">
@@ -286,6 +339,53 @@ export default function Clubs() {
                     );
                 })}
             </div>
+
+            {/* --- CREATE CLUB MODAL --- */}
+            {showCreateModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-[#121214] border border-white/10 rounded-3xl p-8 w-full max-w-md relative animate-in zoom-in-95 duration-200 shadow-2xl">
+                        <button onClick={() => setShowCreateModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white p-2">
+                            <X size={20} />
+                        </button>
+                        <h2 className="text-2xl font-bold mb-6 text-white">Create New Club</h2>
+                        <form onSubmit={handleCreateClub} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Club Name</label>
+                                <input
+                                    type="text" required
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-purple-500 outline-none transition-all"
+                                    placeholder="e.g. Coding Club"
+                                    value={newClub.name}
+                                    onChange={(e) => setNewClub({ ...newClub, name: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Description</label>
+                                <textarea
+                                    required
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-purple-500 outline-none transition-all h-24 resize-none"
+                                    placeholder="What is this club about?"
+                                    value={newClub.description}
+                                    onChange={(e) => setNewClub({ ...newClub, description: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Banner Video (YouTube URL)</label>
+                                <input
+                                    type="text"
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-purple-500 outline-none transition-all"
+                                    placeholder="https://youtube.com/..."
+                                    value={newClub.videoUrl}
+                                    onChange={(e) => setNewClub({ ...newClub, videoUrl: e.target.value })}
+                                />
+                            </div>
+                            <button type="submit" className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 rounded-xl font-bold text-white transition-all shadow-lg shadow-purple-900/20 mt-4">
+                                🚀 Launch Club
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

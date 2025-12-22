@@ -267,4 +267,28 @@ router.delete('/post/:id', fetchUser, async (req, res) => {
 });
 
 
+
+// ==========================================
+// 6. ADMIN - DELETE CLUB
+// ==========================================
+router.delete('/delete/:id', fetchUser, async (req, res) => {
+    try {
+        // 1. Check if user is Faculty (Security)
+        if (req.user.role !== 'faculty') {
+            return res.status(403).send("Access Denied: Faculty only");
+        }
+
+        // 2. Delete the club
+        let club = await Club.findById(req.params.id);
+        if (!club) return res.status(404).send("Not Found");
+
+        await Club.findByIdAndDelete(req.params.id);
+        res.json({ success: "Club has been deleted" });
+    } catch (error) {
+        console.error(error.message);
+        res.status(500).send("Internal Server Error");
+    }
+});
+
+
 module.exports = router;
