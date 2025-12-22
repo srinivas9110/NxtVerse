@@ -217,8 +217,9 @@ export default function Network() {
                                                     e.stopPropagation();
                                                     navigate('/messages', { state: { startChat: user } })
                                                 }}
-                                                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
+                                                className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-purple-500/30 border border-purple-400/20 transition-all"
                                             >
+                                                
                                                 <MessageSquare className="w-3.5 h-3.5" /> Message
                                             </button>
                                         ) : isSent ? (
@@ -238,7 +239,7 @@ export default function Network() {
                                                 className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 hover:border-purple-500/50 font-bold text-xs transition-all flex items-center justify-center gap-2 group/btn"
                                             >
                                                 <UserPlus className="w-3.5 h-3.5 group-hover/btn:scale-110 transition-transform" />
-                                                Link Node
+                                                Connect
                                             </button>
                                         )}
                                     </div>
@@ -251,7 +252,7 @@ export default function Network() {
                 {filteredList.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-24 opacity-30">
                         <Users className="w-20 h-20 text-gray-500 mb-6" />
-                        <p className="text-xl text-gray-400 font-light">No signals found in this sector.</p>
+                        <p className="text-xl text-gray-400 font-light">No peer found in the scope.</p>
                     </div>
                 )}
             </div>

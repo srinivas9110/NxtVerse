@@ -168,7 +168,7 @@ export default function Messages() {
                         <div
                             className="absolute inset-0 z-0 opacity-40 pointer-events-none"
                             style={{
-                                backgroundImage: `url('https://res.cloudinary.com/deiwigg5a/image/upload/v1765518591/download_dnt5ea.jpg')`,
+                                backgroundImage: `url('https://i.pinimg.com/originals/b0/e0/00/b0e000506fae6320af46056c41ffa6ae.jpg')`,
                                 backgroundSize: 'cover',
                                 backgroundPosition: 'center'
                             }}

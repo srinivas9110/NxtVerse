@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     MapPin, Github, Code, Globe, Edit3, Save, Award,
     ExternalLink, Camera, MessageSquare, UserPlus,
-    Zap, Calendar, X, Lock, Hexagon, Box
+    Zap, Calendar, X, Lock, Hexagon, Box, Check, Clock
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -137,9 +137,10 @@ export default function Profile() {
 
     const [loading, setLoading] = useState(true);
     const [showEditModal, setShowEditModal] = useState(false);
-    const [me, setMe] = useState(null);
+    const [me, setMe] = useState(null); // The current logged-in user
     const [ledClub, setLedClub] = useState(null);
 
+    // Profile Data (The user being viewed)
     const [formData, setFormData] = useState({
         _id: '',
         fullName: '', collegeId: '', course: '', section: '', role: '',
@@ -153,16 +154,20 @@ export default function Profile() {
     // 1. FETCH DATA
     const fetchData = async () => {
         const token = localStorage.getItem('token');
+        if (!token) { navigate('/login'); return; }
+
         try {
             setLoading(true);
+            // Always fetch 'me' (current logged in user) to check connection status
             const myRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
             setMe(myRes.data);
 
+            // Fetch the profile being viewed
             if (id && id !== myRes.data._id) {
                 const otherRes = await axios.get(`${API_URL}/api/auth/getuser/${id}`, { headers: { "auth-token": token } });
                 setFormData(otherRes.data);
             } else {
-                setFormData(myRes.data);
+                setFormData(myRes.data); // Viewing own profile
             }
             setLoading(false);
         } catch (err) { console.error(err); setLoading(false); }
@@ -187,12 +192,25 @@ export default function Profile() {
         checkLeadership();
     }, [formData._id]);
 
-    // --- FIX: ROBUST SAVE FUNCTION ---
+    // --- CONNECTION HANDLER (Dynamic Logic) ---
+    const handleConnect = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            // Send request to the user being viewed
+            await axios.post(`${API_URL}/api/users/connect/${formData._id}`, {}, { headers: { "auth-token": token } });
+            
+            // Optimistically update 'me' so the button changes instantly
+            setMe(prev => ({ 
+                ...prev, 
+                requestsSent: [...prev.requestsSent, formData._id] 
+            }));
+        } catch (err) { alert("Connection request failed."); }
+    };
+
+    // --- SAVE PROFILE ---
     const handleSaveChanges = async () => {
         try {
             const token = localStorage.getItem('token');
-
-            // 1. Sanitize Payload (Remove _id and system fields to prevent backend errors)
             const payload = {
                 fullName: formData.fullName,
                 bio: formData.bio,
@@ -201,7 +219,6 @@ export default function Profile() {
                 links: formData.links,
                 projects: formData.projects,
                 achievements: formData.achievements,
-                // Don't send _id, role, or collegeId unless you want them editable
             };
 
             await axios.put(`${API_URL}/api/auth/update`, payload, {
@@ -210,8 +227,6 @@ export default function Profile() {
 
             alert("✅ Profile Updated Successfully");
             setShowEditModal(false);
-
-            // 2. Force Refresh to ensure data is synced from server
             window.location.reload();
 
         } catch (err) {
@@ -220,10 +235,14 @@ export default function Profile() {
         }
     };
 
-    // --- UTILS ---
+    // --- CALCULATE CONNECTION STATE ---
     const isOwnProfile = me && formData._id === me._id;
-    // Fix: Check connection status more robustly
-    const isConnected = me?.connections?.some(connId => connId === formData._id || connId._id === formData._id);
+    
+    // Check various connection states using 'me' (current user) and 'formData' (viewed profile)
+    const isConnected = me?.connections?.some(conn => conn === formData._id || conn._id === formData._id);
+    const isSent = me?.requestsSent?.includes(formData._id);
+    const isReceived = me?.requestsReceived?.includes(formData._id);
+
     const getImg = (path) => path ? (path.startsWith('http') || path.startsWith('blob') ? path : `${API_URL}${path}`) : null;
 
     if (loading) return (
@@ -324,33 +343,38 @@ export default function Profile() {
                                     <Edit3 size={16} /> Edit System
                                 </button>
                             ) : (
-                                <div className="flex gap-3">
+                                <div className="flex flex-col gap-3">
                                     {/* 1. MESSAGE BUTTON (Only if Connected) */}
                                     {isConnected && (
                                         <button
                                             onClick={() => navigate(`/messages`, { state: { startChat: formData } })}
-                                            className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+                                            className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
                                         >
                                             <MessageSquare size={16} /> Message
                                         </button>
                                     )}
 
-                                    {/* 2. CONNECT BUTTON (Changes based on status) */}
-                                    <button
-                                        disabled={isConnected} // Disable if already linked
-                                        className={`flex-1 py-3 rounded-xl border font-bold text-sm flex items-center justify-center gap-2 transition-all
-                                            ${isConnected
-                                                ? 'bg-green-500/10 border-green-500/30 text-green-400 cursor-default'
-                                                : 'bg-white/5 hover:bg-white/10 border-white/10 text-white'
-                                            }
-                                        `}
-                                    >
-                                        {isConnected ? (
-                                            <> <Zap size={16} /> Linked </>
-                                        ) : (
-                                            <> <UserPlus size={16} /> Connect </>
-                                        )}
-                                    </button>
+                                    {/* 2. DYNAMIC CONNECT BUTTON */}
+                                    {isConnected ? (
+                                        <button className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-purple-500/30 border border-purple-400/20 transition-all">
+                                            <Zap size={16} /> Message
+                                        </button>
+                                    ) : isSent ? (
+                                        <button disabled className="w-full py-3 rounded-xl bg-white/5 text-gray-500 border border-white/5 font-bold text-sm flex items-center justify-center gap-2 cursor-wait">
+                                            <Clock size={16} className="animate-pulse" /> Pending
+                                        </button>
+                                    ) : isReceived ? (
+                                        <button disabled className="w-full py-3 rounded-xl bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-bold text-sm flex items-center justify-center gap-2">
+                                            <Check size={16} /> Accept Request
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={handleConnect}
+                                            className="w-full py-3 rounded-xl bg-white/5 hover:bg-purple-600 hover:text-white text-gray-300 border border-white/10 hover:border-purple-500/50 font-bold text-sm transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <UserPlus size={16} /> Connect
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -442,7 +466,7 @@ export default function Profile() {
                         formData={formData}
                         setFormData={setFormData}
                         onClose={() => setShowEditModal(false)}
-                        onSave={handleSaveChanges} // 👈 USING THE FIXED SAVE HANDLER
+                        onSave={handleSaveChanges}
                     />
                 )}
             </AnimatePresence>
@@ -450,7 +474,7 @@ export default function Profile() {
     );
 }
 
-// --- EDIT MODAL COMPONENT (FIXED) ---
+// --- EDIT MODAL COMPONENT ---
 function EditModal({ formData, setFormData, onClose, onSave }) {
     const avatarRef = useRef(null);
     const bannerRef = useRef(null);
@@ -473,20 +497,15 @@ function EditModal({ formData, setFormData, onClose, onSave }) {
         const token = localStorage.getItem('token');
 
         try {
-            console.log(`Uploading ${type}...`);
             const res = await axios.post(`${API_URL}/api/users/upload/${type}`, data, {
                 headers: { "auth-token": token, "Content-Type": "multipart/form-data" }
             });
 
-            console.log("Upload Response:", res.data);
-
-            // 🔍 ROBUST EXTRACTOR: Find the URL regardless of what backend calls it
             // Adjust these keys based on your actual backend response!
             const serverPath = res.data.url || res.data.path || res.data.filePath || res.data[fieldName];
 
             if (serverPath) {
                 setFormData(prev => ({ ...prev, [fieldName]: serverPath }));
-                console.log("✅ Image path set to:", serverPath);
             } else {
                 alert("Upload successful, but server didn't return a path. Check console.");
             }
@@ -494,7 +513,6 @@ function EditModal({ formData, setFormData, onClose, onSave }) {
         } catch (err) {
             console.error("Upload failed:", err);
             alert("❌ Image upload failed. Please try again.");
-            // Revert to old image if failed (optional logic)
         } finally {
             setIsUploading(false); // Unlock Save button
         }
@@ -563,7 +581,7 @@ function EditModal({ formData, setFormData, onClose, onSave }) {
 
                 <div className="p-6 border-t border-white/5 flex justify-end gap-3 sticky bottom-0 bg-[#111111]">
                     <button onClick={onClose} className="px-6 py-2 rounded-xl font-bold text-sm text-gray-400 hover:text-white transition">Cancel</button>
-                    <button onClick={onSave} className="px-8 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-lg shadow-purple-500/20 transition">Save Changes</button>
+                    <button onClick={onSave} disabled={isUploading} className="px-8 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-lg shadow-purple-500/20 transition disabled:opacity-50">Save Changes</button>
                 </div>
             </motion.div>
         </div>

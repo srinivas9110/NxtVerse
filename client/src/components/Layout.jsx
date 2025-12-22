@@ -35,10 +35,9 @@ export default function Layout() {
     const [pulseIndex, setPulseIndex] = useState(0);
     // 🟢 DYNAMIC PULSE MESSAGES
     const pulseMessages = [
-        "SYSTEM ONLINE",
+        "NxtVerse Networking",
         `${activeUsers} PEERS ACTIVE`,
-        "SECTOR A: SECURE",
-        "UPCOMING: 3 EVENTS"
+        "Still in development",
     ];
 
     const calendarRef = useRef(null);
