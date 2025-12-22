@@ -222,7 +222,8 @@ export default function Profile() {
 
     // --- UTILS ---
     const isOwnProfile = me && formData._id === me._id;
-    const isConnected = me?.connections?.includes(formData._id);
+    // Fix: Check connection status more robustly
+    const isConnected = me?.connections?.some(connId => connId === formData._id || connId._id === formData._id);
     const getImg = (path) => path ? (path.startsWith('http') || path.startsWith('blob') ? path : `${API_URL}${path}`) : null;
 
     if (loading) return (
@@ -314,7 +315,7 @@ export default function Profile() {
                                 )}
                             </div>
 
-                            {/* Actions */}
+                            {/* Actions (FIXED LOGIC HERE) */}
                             {isOwnProfile ? (
                                 <button
                                     onClick={() => setShowEditModal(true)}
@@ -324,14 +325,31 @@ export default function Profile() {
                                 </button>
                             ) : (
                                 <div className="flex gap-3">
+                                    {/* 1. MESSAGE BUTTON (Only if Connected) */}
+                                    {isConnected && (
+                                        <button
+                                            onClick={() => navigate(`/messages`, { state: { startChat: formData } })}
+                                            className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+                                        >
+                                            <MessageSquare size={16} /> Message
+                                        </button>
+                                    )}
+
+                                    {/* 2. CONNECT BUTTON (Changes based on status) */}
                                     <button
-                                        onClick={() => navigate(`/messages`, { state: { startChat: formData } })}
-                                        className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-500/20"
+                                        disabled={isConnected} // Disable if already linked
+                                        className={`flex-1 py-3 rounded-xl border font-bold text-sm flex items-center justify-center gap-2 transition-all
+                                            ${isConnected
+                                                ? 'bg-green-500/10 border-green-500/30 text-green-400 cursor-default'
+                                                : 'bg-white/5 hover:bg-white/10 border-white/10 text-white'
+                                            }
+                                        `}
                                     >
-                                        Message
-                                    </button>
-                                    <button className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold text-sm">
-                                        {isConnected ? "Linked" : "Connect"}
+                                        {isConnected ? (
+                                            <> <Zap size={16} /> Linked </>
+                                        ) : (
+                                            <> <UserPlus size={16} /> Connect </>
+                                        )}
                                     </button>
                                 </div>
                             )}
@@ -432,7 +450,6 @@ export default function Profile() {
     );
 }
 
-// --- EDIT MODAL COMPONENT (Unchanged mostly) ---
 // --- EDIT MODAL COMPONENT (FIXED) ---
 function EditModal({ formData, setFormData, onClose, onSave }) {
     const avatarRef = useRef(null);
