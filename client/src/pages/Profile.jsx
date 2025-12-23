@@ -192,19 +192,50 @@ export default function Profile() {
         checkLeadership();
     }, [formData._id]);
 
-    // --- CONNECTION HANDLER (Dynamic Logic) ---
-    const handleConnect = async () => {
+    // 🟢 REPLACEMENT FUNCTION: Direct Cloudinary Upload (Secure)
+    const handleFile = async (e, type) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // 1. Show Local Preview (Instant Feedback)
+        const previewUrl = URL.createObjectURL(file);
+        const fieldName = type === 'avatar' ? 'profilePic' : 'bannerImg';
+        
+        // Save the old image in case upload fails so we can revert
+        const oldImage = formData[fieldName];
+        
+        setFormData(prev => ({ ...prev, [fieldName]: previewUrl }));
+        setIsUploading(true); // Lock the Save button
+
+        // 2. Prepare Cloudinary Upload
+        const data = new FormData();
+        data.append('file', file); 
+        
+        // Use Environment Variables
+        data.append('upload_preset', import.meta.env.VITE_UPLOAD_PRESET);
+        data.append('cloud_name', import.meta.env.VITE_CLOUD_NAME);
+
         try {
-            const token = localStorage.getItem('token');
-            // Send request to the user being viewed
-            await axios.post(`${API_URL}/api/users/connect/${formData._id}`, {}, { headers: { "auth-token": token } });
+            console.log(`🚀 Uploading ${type} to Cloudinary...`);
             
-            // Optimistically update 'me' so the button changes instantly
-            setMe(prev => ({ 
-                ...prev, 
-                requestsSent: [...prev.requestsSent, formData._id] 
-            }));
-        } catch (err) { alert("Connection request failed."); }
+            // 3. Send directly to Cloudinary
+            const cloudName = import.meta.env.VITE_CLOUD_NAME;
+            const res = await axios.post(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, data);
+            
+            console.log("✅ Upload Success:", res.data.secure_url);
+            
+            // 4. Save the Permanent Cloudinary URL to the form
+            setFormData(prev => ({ ...prev, [fieldName]: res.data.secure_url }));
+
+        } catch (err) {
+            console.error("❌ Cloudinary Upload failed:", err);
+            alert("Image upload failed. Please check your internet connection.");
+            
+            // Revert preview if failed
+            setFormData(prev => ({ ...prev, [fieldName]: oldImage })); 
+        } finally {
+            setIsUploading(false); // Unlock the Save button
+        }
     };
 
     // --- SAVE PROFILE ---
