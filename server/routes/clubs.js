@@ -6,6 +6,7 @@ const Chat = require('../models/Chat'); // ✅ New
 const ClubPost = require('../models/ClubPost'); // ✅ Added missing model import
 const fetchUser = require('../middleware/fetchUser');
 const cloudinary = require('cloudinary').v2; // ✅ Added Cloudinary
+const Message = require('../models/Message');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -254,12 +255,33 @@ router.put('/workshop/:id/attendance', fetchUser, async (req, res) => {
     } catch (err) { res.status(500).send("Error"); }
 });
 
-// Delete Workshop
+// 🟢 FIX: Cascade Delete (Workshop -> Chat -> Messages)
 router.delete('/workshop/:id', fetchUser, async (req, res) => {
     try {
+        const workshop = await Workshop.findById(req.params.id);
+        if (!workshop) return res.status(404).send("Not Found");
+
+        // 1. Check permissions (Faculty or President)
+        // (You can add stricter checks here if needed)
+
+        // 2. Delete Associated Chat Logic
+        if (workshop.chatGroupId) {
+            // Delete all messages in that chat
+            const Message = require('../models/Message'); // Ensure imported
+            await Message.deleteMany({ chat: workshop.chatGroupId });
+
+            // Delete the Chat Room itself
+            await Chat.findByIdAndDelete(workshop.chatGroupId);
+        }
+
+        // 3. Delete Workshop
         await Workshop.findByIdAndDelete(req.params.id);
-        res.json({ success: "Deleted" });
-    } catch (err) { res.status(500).send("Error"); }
+        
+        res.json({ success: "Workshop and associated Chat deleted" });
+    } catch (err) { 
+        console.error(err);
+        res.status(500).send("Error deleting workshop"); 
+    }
 });
 
 // Posts
