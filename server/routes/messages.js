@@ -1,18 +1,24 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose'); // ✅ Added for validation
 const Message = require('../models/Message');
 const User = require('../models/User');
-const Chat = require('../models/Chat'); // Ensure this matches your file name exactly
+const Chat = require('../models/Chat');
 const fetchUser = require('../middleware/fetchUser');
 
+// Helper to check IDs safely
+const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
+
 // @route   GET /api/messages/conversations
-// @desc    Get Sidebar List (Both Groups & DMs)
+// @desc    Get Sidebar List
 router.get('/conversations', fetchUser, async (req, res) => {
     try {
         const currentUserId = req.user.id;
 
-        // 🟢 FIX 1: Robust Query for Vanishing Groups
-        // We use $in to ensure Mongoose handles the String vs ObjectId matching correctly
+        // 🛡️ SAFETY: If User ID is somehow invalid, stop.
+        if (!isValidId(currentUserId)) return res.status(400).json({ error: "Invalid User ID" });
+
+        // 1. FETCH GROUPS
         const groupChats = await Chat.find({ 
             users: { $in: [currentUserId] } 
         })
@@ -30,14 +36,14 @@ router.get('/conversations', fetchUser, async (req, res) => {
             const otherId = (msg.sender.toString() === currentUserId) 
                 ? msg.receiver.toString() 
                 : msg.sender.toString();
-            talkedUserIds.add(otherId);
+            if (isValidId(otherId)) talkedUserIds.add(otherId); // 🛡️ Check validity
         });
         talkedUserIds.delete(currentUserId);
 
         const dmUsers = await User.find({ _id: { $in: Array.from(talkedUserIds) } })
             .select('fullName email role profilePic');
 
-        // 3. MERGE THEM
+        // 3. MERGE
         const formattedGroups = groupChats.map(chat => ({
             _id: chat._id,
             fullName: chat.chatName, 
@@ -56,30 +62,27 @@ router.get('/conversations', fetchUser, async (req, res) => {
 });
 
 // @route   GET /api/messages/:id
-// @desc    Get history (Works for UserID OR GroupID)
+// @desc    Get history
 router.get('/:id', fetchUser, async (req, res) => {
     try {
         const myId = req.user.id;
         const targetId = req.params.id;
 
-        // Check if this ID belongs to a Group
-        // We use try/catch here because if targetId is not a valid ObjectId, it might crash
-        let isGroup = null;
-        try {
-            isGroup = await Chat.findById(targetId);
-        } catch (e) {
-            isGroup = null; // Not a group ID
+        // 🛡️ SAFETY: Prevent "undefined" crash
+        if (!isValidId(targetId)) {
+            return res.status(400).json({ error: "Invalid Chat ID" });
         }
+
+        // Check if Group
+        const isGroup = await Chat.findById(targetId);
 
         let messages;
 
         if (isGroup) {
-            // A. It's a Group: Fetch by Chat ID
             messages = await Message.find({ chat: targetId })
                 .populate('sender', 'fullName profilePic')
                 .sort({ timestamp: 1 });
         } else {
-            // B. It's a User: Fetch Legacy DM
             messages = await Message.find({
                 $or: [
                     { sender: myId, receiver: targetId },
@@ -90,38 +93,30 @@ router.get('/:id', fetchUser, async (req, res) => {
 
         res.json(messages);
     } catch (error) {
-        console.error(error);
+        console.error("Fetch Messages Error:", error);
         res.status(500).send("Server Error");
     }
 });
 
 // @route   POST /api/messages/send/:id
-// @desc    Send (Checks permissions for Groups)
+// @desc    Send Message
 router.post('/send/:id', fetchUser, async (req, res) => {
     try {
         const { text } = req.body;
         const targetId = req.params.id;
         const senderId = req.user.id;
 
-        let isGroup = null;
-        try {
-            isGroup = await Chat.findById(targetId);
-        } catch (e) {
-            isGroup = null;
-        }
+        // 🛡️ SAFETY: Prevent "undefined" crash
+        if (!isValidId(targetId)) return res.status(400).json({ error: "Invalid Target ID" });
 
+        const isGroup = await Chat.findById(targetId);
         let newMessage;
 
         if (isGroup) {
-            // 🟢 FIX 2: "Failed to Send" for President
-            // Problem: groupAdmins contains ObjectIds, senderId is a String.
-            // Solution: Convert IDs to strings before checking.
+            // ADMIN CHECK
             if (isGroup.isAnnouncement) {
                 const isAdmin = isGroup.groupAdmins.some(adminId => adminId.toString() === senderId);
-                
-                if (!isAdmin) {
-                    return res.status(403).json({ error: "Only admins can send messages here." });
-                }
+                if (!isAdmin) return res.status(403).json({ error: "Only admins can send messages here." });
             }
 
             newMessage = new Message({
@@ -130,14 +125,12 @@ router.post('/send/:id', fetchUser, async (req, res) => {
                 text
             });
 
-            // Update latest message and 'updatedAt' so it jumps to top of sidebar
             await Chat.findByIdAndUpdate(targetId, { 
                 latestMessage: newMessage._id,
                 updatedAt: new Date() 
             });
 
         } else {
-            // Legacy DM
             newMessage = new Message({
                 sender: senderId,
                 receiver: targetId,
