@@ -6,7 +6,7 @@ import YouTube from 'react-youtube';
 import {
     Calendar, MapPin, Clock, Trash2, Plus, X,
     Send, Link as LinkIcon, ExternalLink, Image as ImageIcon,
-    Users, Shield, CheckCircle, Search, ArrowLeft, MessageSquare, Star, Zap, Settings, PlayCircle, CheckSquare
+    Users, Shield, CheckCircle, Search, ArrowLeft, MessageSquare, Star, Zap, Settings, PlayCircle, CheckSquare, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 
 const getYoutubeId = (url) => {
@@ -304,13 +304,40 @@ export default function ClubDetails() {
                             const isLive = workshop.status === 'live';
                             const isCompleted = workshop.status === 'completed';
 
-                            return (
+                            return(
                                 <div key={workshop._id} className="bg-[#121214] border border-white/5 p-6 rounded-3xl flex flex-col md:flex-row gap-6 relative overflow-visible group hover:border-purple-500/30 transition-all">
                                     
-                                    {/* DELETE BUTTON */}
-                                    {(isFaculty || isPresident) && (
-                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteWorkshop(workshop._id); }} className="absolute top-4 right-4 p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all z-20"><Trash2 size={18} /></button>
-                                    )}
+                                    {/* 🟢 FIX: ACTION BAR (Holds both Delete & Settings Side-by-Side) */}
+                                    <div className="absolute top-4 right-4 flex gap-2 z-20">
+                                        {/* STATUS MANAGER (Organizer/President) */}
+                                        {isOrganizer && (
+                                            <div className="relative">
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); setStatusMenuOpen(statusMenuOpen === workshop._id ? null : workshop._id); }} 
+                                                    className="p-2 bg-[#18181b] border border-white/10 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                                >
+                                                    <Settings size={18} />
+                                                </button>
+                                                {statusMenuOpen === workshop._id && (
+                                                    <div className="absolute top-10 right-0 w-48 bg-[#18181b] border border-white/10 rounded-xl shadow-2xl p-2 z-50 flex flex-col gap-1">
+                                                        <button onClick={() => handleUpdateStatus(workshop._id, 'upcoming')} className={`text-xs font-bold p-3 rounded-lg text-left hover:bg-white/5 flex items-center gap-2 ${workshop.status === 'upcoming' ? 'text-purple-400' : 'text-gray-400'}`}><Calendar size={14} /> Upcoming</button>
+                                                        <button onClick={() => handleUpdateStatus(workshop._id, 'live')} className={`text-xs font-bold p-3 rounded-lg text-left hover:bg-white/5 flex items-center gap-2 ${workshop.status === 'live' ? 'text-red-500' : 'text-gray-400'}`}><PlayCircle size={14} /> Mark as Live</button>
+                                                        <button onClick={() => handleUpdateStatus(workshop._id, 'completed')} className={`text-xs font-bold p-3 rounded-lg text-left hover:bg-white/5 flex items-center gap-2 ${workshop.status === 'completed' ? 'text-green-500' : 'text-gray-400'}`}><CheckSquare size={14} /> Mark Completed</button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* DELETE BUTTON (Faculty/President) */}
+                                        {(isFaculty || isPresident) && (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleDeleteWorkshop(workshop._id); }} 
+                                                className="p-2 bg-[#18181b] border border-white/10 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        )}
+                                    </div>
 
                                     {/* DATE CARD (with Status Indicator) */}
                                     <div className="bg-[#18181b] rounded-2xl p-4 flex flex-col items-center justify-center min-w-[80px] border border-white/5 relative overflow-hidden">
@@ -322,30 +349,9 @@ export default function ClubDetails() {
                                         <span className="text-3xl font-black text-white">{new Date(workshop.date).getDate()}</span>
                                     </div>
 
-                                    <div className="flex-1 z-10">
-                                        <div className="flex justify-between items-start">
-                                            <h3 className="text-2xl font-bold text-white mb-2">{workshop.title}</h3>
-                                            
-                                            {/* 🟢 NEW: STATUS MANAGER (President Only) */}
-                                            {isOrganizer && (
-                                                <div className="relative">
-                                                    <button 
-                                                        onClick={(e) => { e.stopPropagation(); setStatusMenuOpen(statusMenuOpen === workshop._id ? null : workshop._id); }} 
-                                                        className="p-2 bg-[#18181b] border border-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
-                                                    >
-                                                        <Settings size={16} />
-                                                    </button>
-                                                    {statusMenuOpen === workshop._id && (
-                                                        <div className="absolute top-10 right-0 w-48 bg-[#18181b] border border-white/10 rounded-xl shadow-2xl p-2 z-50 flex flex-col gap-1">
-                                                            <button onClick={() => handleUpdateStatus(workshop._id, 'upcoming')} className={`text-xs font-bold p-3 rounded-lg text-left hover:bg-white/5 flex items-center gap-2 ${workshop.status === 'upcoming' ? 'text-purple-400' : 'text-gray-400'}`}><Calendar size={14} /> Upcoming</button>
-                                                            <button onClick={() => handleUpdateStatus(workshop._id, 'live')} className={`text-xs font-bold p-3 rounded-lg text-left hover:bg-white/5 flex items-center gap-2 ${workshop.status === 'live' ? 'text-red-500' : 'text-gray-400'}`}><PlayCircle size={14} /> Mark as Live</button>
-                                                            <button onClick={() => handleUpdateStatus(workshop._id, 'completed')} className={`text-xs font-bold p-3 rounded-lg text-left hover:bg-white/5 flex items-center gap-2 ${workshop.status === 'completed' ? 'text-green-500' : 'text-gray-400'}`}><CheckSquare size={14} /> Mark Completed</button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-
+                                    <div className="flex-1 z-10 pr-16"> {/* Added padding-right so text doesn't hit buttons */}
+                                        <h3 className="text-2xl font-bold text-white mb-2">{workshop.title}</h3>
+                                        
                                         <div className="flex gap-4 text-sm text-gray-400 mb-2">
                                             <span className="flex items-center gap-1"><Clock size={14} /> {workshop.time}</span>
                                             <span className="flex items-center gap-1"><MapPin size={14} /> {workshop.venue}</span>
@@ -353,7 +359,7 @@ export default function ClubDetails() {
                                         <p className="text-gray-500 text-sm mb-4 line-clamp-2">{workshop.description}</p>
 
                                         <div className="flex gap-3">
-                                            {/* --- 🟢 SMART BUTTON LIFECYCLE --- */}
+                                            {/* BUTTON LIFECYCLE */}
                                             {isCompleted && isRegistered ? (
                                                 hasRated ? (
                                                     <button disabled className="px-6 py-2 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-lg font-bold flex items-center gap-2 cursor-default">
@@ -393,7 +399,7 @@ export default function ClubDetails() {
                                                 </button>
                                             )}
 
-                                            {isOrganizer && <button onClick={() => { setDashboardModal(workshop); setSearchTerm(""); setDashboardTab('attendees');}} className="px-4 py-2 bg-[#18181b] border border-white/10 hover:bg-white/5 text-white rounded-lg font-bold flex items-center gap-2 transition-all"><Users size={16} /> Dashboard</button>}
+                                            {isOrganizer && <button onClick={() => { setDashboardModal(workshop); setSearchTerm(""); setDashboardTab('attendees'); }} className="px-4 py-2 bg-[#18181b] border border-white/10 hover:bg-white/5 text-white rounded-lg font-bold flex items-center gap-2 transition-all"><Users size={16} /> Dashboard</button>}
                                         </div>
                                     </div>
                                 </div>
