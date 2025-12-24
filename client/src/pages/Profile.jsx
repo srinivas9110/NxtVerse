@@ -192,64 +192,18 @@ export default function Profile() {
         checkLeadership();
     }, [formData._id]);
 
-    // 🟢 REPLACEMENT FUNCTION: Direct Cloudinary Upload (Secure)
-    const handleFile = async (e, type) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        // 1. Show Local Preview (Instant Feedback)
-        const previewUrl = URL.createObjectURL(file);
-        const fieldName = type === 'avatar' ? 'profilePic' : 'bannerImg';
-        
-        // Save the old image in case upload fails so we can revert
-        const oldImage = formData[fieldName];
-        
-        setFormData(prev => ({ ...prev, [fieldName]: previewUrl }));
-        setIsUploading(true); // Lock the Save button
-
-        // 2. Prepare Cloudinary Upload
-        const data = new FormData();
-        data.append('file', file); 
-        
-        // Use Environment Variables
-        data.append('upload_preset', import.meta.env.VITE_UPLOAD_PRESET);
-        data.append('cloud_name', import.meta.env.VITE_CLOUD_NAME);
-
-        try {
-            console.log(`🚀 Uploading ${type} to Cloudinary...`);
-            
-            // 3. Send directly to Cloudinary
-            const cloudName = import.meta.env.VITE_CLOUD_NAME;
-            const res = await axios.post(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, data);
-            
-            console.log("✅ Upload Success:", res.data.secure_url);
-            
-            // 4. Save the Permanent Cloudinary URL to the form
-            setFormData(prev => ({ ...prev, [fieldName]: res.data.secure_url }));
-
-        } catch (err) {
-            console.error("❌ Cloudinary Upload failed:", err);
-            alert("Image upload failed. Please check your internet connection.");
-            
-            // Revert preview if failed
-            setFormData(prev => ({ ...prev, [fieldName]: oldImage })); 
-        } finally {
-            setIsUploading(false); // Unlock the Save button
-        }
-    };
-
-    // --- SAVE PROFILE ---
-    const handleSaveChanges = async () => {
+    // --- SAVE PROFILE (🟢 UPDATED TO ACCEPT DATA ARGUMENT) ---
+    const handleSaveChanges = async (dataToSave) => {
         try {
             const token = localStorage.getItem('token');
             const payload = {
-                fullName: formData.fullName,
-                bio: formData.bio,
-                profilePic: formData.profilePic,
-                bannerImg: formData.bannerImg,
-                links: formData.links,
-                projects: formData.projects,
-                achievements: formData.achievements,
+                fullName: dataToSave.fullName,
+                bio: dataToSave.bio,
+                profilePic: dataToSave.profilePic,
+                bannerImg: dataToSave.bannerImg,
+                links: dataToSave.links,
+                projects: dataToSave.projects,
+                achievements: dataToSave.achievements,
             };
 
             await axios.put(`${API_URL}/api/auth/update`, payload, {
@@ -505,11 +459,14 @@ export default function Profile() {
     );
 }
 
-// --- EDIT MODAL COMPONENT (Fixed for Cloudinary) ---
+// --- EDIT MODAL COMPONENT (🟢 UPDATED FOR ROBUST CLOUDINARY UPLOAD) ---
 function EditModal({ formData, setFormData, onClose, onSave }) {
     const avatarRef = useRef(null);
     const bannerRef = useRef(null);
     const [isUploading, setIsUploading] = useState(false); // 🔒 Lock save while uploading
+    
+    // 🟢 NEW: Store uploaded URLs here to prevent race conditions
+    const uploadedUrls = useRef({}); 
 
     const handleFile = async (e, type) => {
         const file = e.target.files[0];
@@ -528,9 +485,6 @@ function EditModal({ formData, setFormData, onClose, onSave }) {
         // 2. Prepare Cloudinary Upload
         const data = new FormData();
         data.append('file', file); 
-        
-        // Use Environment Variables
-        // Make sure these are set in your Vercel/Local .env file!
         data.append('upload_preset', import.meta.env.VITE_UPLOAD_PRESET);
         data.append('cloud_name', import.meta.env.VITE_CLOUD_NAME);
 
@@ -543,8 +497,8 @@ function EditModal({ formData, setFormData, onClose, onSave }) {
             
             console.log("✅ Upload Success:", res.data.secure_url);
             
-            // 4. Save the Permanent Cloudinary URL to the form
-            setFormData(prev => ({ ...prev, [fieldName]: res.data.secure_url }));
+            // 🟢 4. Save the Permanent Cloudinary URL to the ref (Synchronous!)
+            uploadedUrls.current[fieldName] = res.data.secure_url;
 
         } catch (err) {
             console.error("❌ Cloudinary Upload failed:", err);
@@ -555,6 +509,15 @@ function EditModal({ formData, setFormData, onClose, onSave }) {
         } finally {
             setIsUploading(false); // Unlock Save button
         }
+    };
+
+    // 🟢 NEW: Create a final data object and call the parent's onSave function
+    const handleLocalSave = () => {
+        const dataToSave = {
+            ...formData,
+            ...uploadedUrls.current // Overwrite with any new Cloudinary URLs
+        };
+        onSave(dataToSave);
     };
 
     return (
@@ -620,7 +583,8 @@ function EditModal({ formData, setFormData, onClose, onSave }) {
 
                 <div className="p-6 border-t border-white/5 flex justify-end gap-3 sticky bottom-0 bg-[#111111]">
                     <button onClick={onClose} className="px-6 py-2 rounded-xl font-bold text-sm text-gray-400 hover:text-white transition">Cancel</button>
-                    <button onClick={onSave} disabled={isUploading} className="px-8 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-lg shadow-purple-500/20 transition disabled:opacity-50">
+                    {/* 🟢 UPDATED: Call local save function */}
+                    <button onClick={handleLocalSave} disabled={isUploading} className="px-8 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-lg shadow-purple-500/20 transition disabled:opacity-50">
                         {isUploading ? "Uploading..." : "Save Changes"}
                     </button>
                 </div>
