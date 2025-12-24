@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+
 const WorkshopSchema = new mongoose.Schema({
     clubId: { type: mongoose.Schema.Types.ObjectId, ref: 'Club' },
     title: String,
@@ -7,9 +8,23 @@ const WorkshopSchema = new mongoose.Schema({
     venue: String,
     description: String,
     organizers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    
+    // 👇 NEW: The WhatsApp-killer Group ID
+    chatGroupId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chat' },
+
     attendees: [{
         user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-        present: { type: Boolean, default: false }
+        present: { type: Boolean, default: false },
+        
+        // 👇 NEW: "Cafe Style" Micro-Feedback
+        feedback: {
+            pacing: { type: String, enum: ['Too Slow', 'Perfect', 'Too Fast'] },
+            clarity: { type: String, enum: ['Confusing', 'Clear', 'Mind-blowing'] },
+            vibe: { type: String, enum: ['Sleepy', 'Okay', 'Hype'] },
+            overall: { type: String, enum: ['👍', '👎'] },
+            submittedAt: { type: Date }
+        }
     }]
 });
+
 module.exports = mongoose.model('Workshop', WorkshopSchema);
