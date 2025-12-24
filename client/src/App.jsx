@@ -15,7 +15,6 @@ import Hackathons from './pages/Hackathons';
 import Messages from './pages/Messages';
 import Clubs from './pages/Clubs';
 import ClubDetails from './pages/ClubDetails';
-import Ticket from './pages/Ticket';
 import ResourcesPage from './pages/Resources';
 import ArisePage from './pages/Arise';
 import AriseAdmin from './pages/AriseAdmin';
@@ -45,7 +44,6 @@ export default function App() {
                     <Route path="/messages/:id" element={<Messages />} />
                     <Route path="/clubs" element={<Clubs />} />
                     <Route path="/clubs/:id" element={<ClubDetails />} />
-                    <Route path="/ticket/:workshopId" element={<Ticket />} />
                     <Route path="/resources" element={<ResourcesPage />} />
                     <Route path="/arise-admin" element={<AriseAdmin />} />
                 </Route>
