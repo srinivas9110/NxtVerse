@@ -38,3 +38,45 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 input[type="date"]::-webkit-calendar-picker-indicator:hover {
     opacity: 1;
 }
+
+/* --- CUSTOM SCROLLBARS FOR DARK THEME --- */
+
+/* Firefox Scrollbar Colors */
+* {
+  scrollbar-width: thin;          /* "auto" or "thin" */
+  scrollbar-color: #27272a #09090b;   /* thumb color | track color */
+}
+
+/* 1. The Scrollbar Track (The background) */
+::-webkit-scrollbar {
+  width: 8px;               /* Width of vertical scrollbar */
+  height: 8px;              /* Height of horizontal scrollbar */
+}
+
+/* 2. The Track (Background area) */
+::-webkit-scrollbar-track {
+  background: #09090b;      /* Matches your dark bg color */
+  border-radius: 4px;
+}
+
+/* 3. The Handle (The moving part) */
+::-webkit-scrollbar-thumb {
+  background: #27272a;      /* Dark Grey (Subtle) */
+  border-radius: 4px;
+}
+
+/* 4. Handle on Hover */
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;      /* Slightly lighter grey when you grab it */
+}
+
+/* 5. Hide Scrollbar for specific "clean" areas if needed */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 6. Utility to hide scrollbar but keep functionality */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}

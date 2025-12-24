@@ -137,10 +137,10 @@ export default function Layout() {
     const isActive = (path) => location.pathname === path;
 
     return (
-        <div className="flex min-h-screen bg-[#050505] text-white font-sans selection:bg-purple-500/30">
+        <div className="flex min-h-screen bg-[#050505] text-white font-sans selection:bg-purple-500/30 hide-scrollbar">
 
             {/* SIDEBAR */}
-            <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#09090b] border-r border-white/5 transform transition-transform duration-300 md:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#09090b] border-r border-white/5 transform transition-transform duration-300 md:translate-x-0  hide-scrollbar ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 <div className="h-16 flex items-center gap-3 px-6 border-b border-white/5">
                     <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
                         <span className="font-bold text-white">N</span>
