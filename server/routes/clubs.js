@@ -183,24 +183,58 @@ router.get('/:id', fetchUser, async (req, res) => {
     } catch (err) { res.status(500).send("Server Error"); }
 });
 
-// Workshop Organizer Toggle
+// Workshop Organizer Toggle (NOW SYNCS WITH CHAT ADMINS 🔄)
 router.put('/workshop/:id/organizer', fetchUser, async (req, res) => {
     try {
         const { studentId } = req.body;
+        
+        // 1. Validation
         if (studentId === req.user.id) return res.status(400).json({ error: "Cannot assign yourself" });
+
         const workshop = await Workshop.findById(req.params.id);
+        if (!workshop) return res.status(404).send("Workshop not found");
+
+        // 2. Toggle Logic
+        let action = ''; // 'added' or 'removed'
 
         if (workshop.organizers.includes(studentId)) {
+            // Remove
             workshop.organizers = workshop.organizers.filter(id => id.toString() !== studentId);
+            action = 'removed';
         } else {
+            // Add
             workshop.organizers.push(studentId);
+            action = 'added';
         }
         await workshop.save();
+
+        // 3. 🟢 CRITICAL FIX: Sync with Chat Group
+        if (workshop.chatGroupId) {
+            if (action === 'added') {
+                await Chat.findByIdAndUpdate(workshop.chatGroupId, {
+                    $addToSet: { 
+                        groupAdmins: studentId, // Make them Admin 🛡️
+                        users: studentId        // Ensure they are in the group
+                    }
+                });
+            } else {
+                await Chat.findByIdAndUpdate(workshop.chatGroupId, {
+                    $pull: { groupAdmins: studentId } // Revoke Admin ❌
+                });
+            }
+        }
+
+        // 4. Return Updated Data
         const updated = await Workshop.findById(req.params.id)
             .populate({ path: 'attendees.user', select: 'fullName collegeId section role' })
             .populate('organizers', 'fullName');
+            
         res.json(updated);
-    } catch (err) { res.status(500).send("Error"); }
+
+    } catch (err) { 
+        console.error(err);
+        res.status(500).send("Error syncing organizers"); 
+    }
 });
 
 // Mark Attendance

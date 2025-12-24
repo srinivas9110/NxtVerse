@@ -139,4 +139,37 @@ router.post('/send/:id', fetchUser, async (req, res) => {
     }
 });
 
+// @route   PUT /api/messages/react/:id
+// @desc    Toggle Reaction
+router.put('/react/:id', fetchUser, async (req, res) => {
+    try {
+        const { emoji } = req.body;
+        const message = await Message.findById(req.params.id);
+        
+        if (!message) return res.status(404).send("Message not found");
+
+        // Check if user already reacted with THIS emoji
+        const existingIndex = message.reactions.findIndex(
+            r => r.user.toString() === req.user.id && r.emoji === emoji
+        );
+
+        if (existingIndex > -1) {
+            // Toggle OFF (Remove it)
+            message.reactions.splice(existingIndex, 1);
+        } else {
+            // Toggle ON (Add it)
+            message.reactions.push({ user: req.user.id, emoji });
+        }
+
+        await message.save();
+        
+        // Return the updated reactions array so frontend can update instantly
+        res.json(message.reactions);
+
+    } catch (error) {
+        console.error("Reaction Error:", error);
+        res.status(500).send("Server Error");
+    }
+});
+
 module.exports = router;

@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
 import axios from 'axios';
-import { MessageSquare, Send, Search, Video, MoreHorizontal, ArrowLeft, Users, Lock, Megaphone } from 'lucide-react';
+import { 
+    MessageSquare, Send, Search, Video, MoreHorizontal, 
+    ArrowLeft, Users, Lock, Megaphone, Smile 
+} from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function Messages() {
@@ -12,6 +15,10 @@ export default function Messages() {
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState("");
     const [currentUser, setCurrentUser] = useState(null);
+    
+    // State for the "Reaction Picker" popup
+    const [showReactionPicker, setShowReactionPicker] = useState(null); // Stores messageId
+    
     const scrollRef = useRef();
 
     // 1. Init
@@ -22,13 +29,10 @@ export default function Messages() {
 
             try {
                 const userRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
-                const myUser = userRes.data;
-                setCurrentUser(myUser);
+                setCurrentUser(userRes.data);
 
                 const contactsRes = await axios.get(`${API_URL}/api/messages/conversations`, { headers: { "auth-token": token } });
-                
-                // Filter out myself from DMs (Groups are fine)
-                let currentContacts = contactsRes.data.filter(c => c._id !== myUser._id || c.isGroup);
+                let currentContacts = contactsRes.data.filter(c => c._id !== userRes.data._id || c.isGroup);
 
                 if (location.state?.startChat) {
                     const newPeer = location.state.startChat;
@@ -79,12 +83,12 @@ export default function Messages() {
 
             const tempMsg = {
                 _id: Date.now(),
-                sender: currentUser._id, // Just ID for local echo
+                sender: currentUser._id,
                 text: newMessage,
-                timestamp: new Date()
+                timestamp: new Date(),
+                reactions: [] // Init empty reactions
             };
             
-            // Optimistic update
             setMessages([...messages, tempMsg]);
             setNewMessage("");
 
@@ -97,16 +101,53 @@ export default function Messages() {
         }
     };
 
-    // Helper: Check if user is admin in the group
+    // 5. Handle Reaction Toggle
+    const handleReaction = async (msgId, emoji) => {
+        // Optimistic UI Update
+        const updatedMessages = messages.map(msg => {
+            if (msg._id === msgId) {
+                const existingIdx = msg.reactions?.findIndex(r => r.user === currentUser._id && r.emoji === emoji);
+                let newReactions = msg.reactions ? [...msg.reactions] : [];
+                
+                if (existingIdx > -1) {
+                    newReactions.splice(existingIdx, 1); // Remove
+                } else {
+                    newReactions.push({ user: currentUser._id, emoji }); // Add
+                }
+                return { ...msg, reactions: newReactions };
+            }
+            return msg;
+        });
+        setMessages(updatedMessages);
+        setShowReactionPicker(null); // Close picker
+
+        // API Call
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`${API_URL}/api/messages/react/${msgId}`, { emoji }, {
+                headers: { "auth-token": token }
+            });
+        } catch (err) { console.error("Reaction failed"); }
+    };
+
     const isAdmin = selectedContact?.isGroup 
         ? selectedContact.groupAdmins?.includes(currentUser?._id)
-        : true; // In DMs, you are always "admin" of your own text
+        : true; 
 
     const canChat = !selectedContact?.isAnnouncement || isAdmin;
 
+    // Helper: Group reactions for display (e.g., { '👍': 5, '🔥': 2 })
+    const getGroupedReactions = (reactions) => {
+        if (!reactions) return {};
+        return reactions.reduce((acc, r) => {
+            acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+            return acc;
+        }, {});
+    };
+
     return (
-        <div className="flex h-full bg-[#050505] text-white overflow-hidden">
-            {/* 1. CONTACTS SIDEBAR */}
+        <div className="flex h-full bg-[#050505] text-white overflow-hidden" onClick={() => setShowReactionPicker(null)}>
+            {/* SIDEBAR */}
             <div className={`w-full md:w-96 bg-[#09090b] border-r border-white/5 flex flex-col ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
                 <div className="p-4 border-b border-white/5 bg-[#09090b]">
                     <h2 className="text-xl font-bold flex items-center gap-2 mb-4"><MessageSquare className="text-purple-500" /> Messages</h2>
@@ -135,9 +176,10 @@ export default function Messages() {
                 </div>
             </div>
 
-            {/* 2. CHAT AREA */}
+            {/* CHAT AREA */}
             {selectedContact ? (
                 <div className="flex-1 flex flex-col relative">
+                    {/* Header */}
                     <div className="h-16 px-6 border-b border-white/5 bg-[#09090b]/90 backdrop-blur-md flex items-center justify-between z-20">
                         <div className="flex items-center gap-3">
                             <button onClick={() => setSelectedContact(null)} className="md:hidden text-gray-400 hover:text-white"><ArrowLeft /></button>
@@ -152,27 +194,66 @@ export default function Messages() {
                         <MoreHorizontal className="text-gray-400 cursor-pointer hover:text-white" />
                     </div>
 
+                    {/* Chat Body */}
                     <div className="flex-1 overflow-y-auto p-4 md:p-8 flex flex-col gap-3 relative custom-scrollbar">
-                        {/* Background */}
                         <div className="absolute inset-0 z-0 opacity-20 pointer-events-none bg-[url('https://i.pinimg.com/originals/b0/e0/00/b0e000506fae6320af46056c41ffa6ae.jpg')] bg-cover bg-center"></div>
 
                         {messages.map((msg, idx) => {
-                            // Check if sender is object (Group chat population) or string (Legacy DM)
                             const senderId = msg.sender._id || msg.sender;
                             const isMe = senderId === currentUser._id;
-                            
-                            // For groups, show name
                             const senderName = msg.sender.fullName || "User";
+                            const reactions = getGroupedReactions(msg.reactions);
 
                             return (
-                                <div key={idx} className={`z-10 flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[85%] self-${isMe ? 'end' : 'start'}`}>
+                                <div key={idx} className={`z-10 flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[85%] self-${isMe ? 'end' : 'start'} group relative mb-2`}>
                                     {!isMe && selectedContact.isGroup && (
                                         <span className="text-[10px] text-gray-400 ml-2 mb-1">{senderName}</span>
                                     )}
-                                    <div className={`px-4 py-2 rounded-2xl shadow-md text-sm leading-relaxed ${isMe ? 'bg-purple-600 text-white rounded-tr-none' : 'bg-[#202c33] text-gray-200 rounded-tl-none'}`}>
+                                    
+                                    <div className={`px-4 py-2 rounded-2xl shadow-md text-sm leading-relaxed relative ${isMe ? 'bg-purple-600 text-white rounded-tr-none' : 'bg-[#202c33] text-gray-200 rounded-tl-none'}`}>
                                         {msg.text}
-                                        <p className="text-[9px] text-right opacity-60 mt-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                        
+                                        {/* Reaction Picker Button (Shows on Hover) */}
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); setShowReactionPicker(showReactionPicker === msg._id ? null : msg._id); }}
+                                            className={`absolute -right-8 top-1 p-1.5 rounded-full bg-[#18181b] border border-white/10 text-gray-400 hover:text-yellow-400 hover:scale-110 transition-all opacity-0 group-hover:opacity-100 ${isMe ? '-left-8 right-auto' : ''}`}
+                                        >
+                                            <Smile size={14} />
+                                        </button>
+
+                                        {/* Reaction Picker Popover */}
+                                        {showReactionPicker === msg._id && (
+                                            <div className="absolute -top-10 left-0 bg-[#18181b] border border-white/10 rounded-full px-2 py-1 flex gap-1 shadow-xl z-50 animate-in zoom-in-95">
+                                                {['👍', '❤️', '🔥', '😂', '😮'].map(emoji => (
+                                                    <button 
+                                                        key={emoji} 
+                                                        onClick={() => handleReaction(msg._id, emoji)}
+                                                        className="hover:scale-125 transition-transform p-1 text-lg"
+                                                    >
+                                                        {emoji}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
+
+                                    {/* Display Reactions */}
+                                    {Object.keys(reactions).length > 0 && (
+                                        <div className="flex gap-1 mt-1 flex-wrap">
+                                            {Object.entries(reactions).map(([emoji, count]) => (
+                                                <button 
+                                                    key={emoji}
+                                                    onClick={() => handleReaction(msg._id, emoji)}
+                                                    className="text-[10px] bg-[#18181b] border border-white/5 rounded-full px-2 py-0.5 text-gray-300 flex items-center gap-1 hover:bg-white/10"
+                                                >
+                                                    <span>{emoji}</span>
+                                                    <span className="font-bold">{count}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <p className="text-[9px] text-gray-500 mt-0.5 text-right w-full pr-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                 </div>
                             );
                         })}
