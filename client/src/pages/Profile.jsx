@@ -505,7 +505,7 @@ export default function Profile() {
     );
 }
 
-// --- EDIT MODAL COMPONENT ---
+// --- EDIT MODAL COMPONENT (Fixed for Cloudinary) ---
 function EditModal({ formData, setFormData, onClose, onSave }) {
     const avatarRef = useRef(null);
     const bannerRef = useRef(null);
@@ -518,32 +518,40 @@ function EditModal({ formData, setFormData, onClose, onSave }) {
         // 1. Show Local Preview immediately (for UX)
         const previewUrl = URL.createObjectURL(file);
         const fieldName = type === 'avatar' ? 'profilePic' : 'bannerImg';
+        
+        // Keep reference to old image in case upload fails
+        const oldImage = formData[fieldName];
 
         setFormData(prev => ({ ...prev, [fieldName]: previewUrl }));
         setIsUploading(true); // Lock Save button
 
-        // 2. Upload to Server
+        // 2. Prepare Cloudinary Upload
         const data = new FormData();
-        data.append('image', file); // Make sure backend expects 'image' field
-        const token = localStorage.getItem('token');
+        data.append('file', file); 
+        
+        // Use Environment Variables
+        // Make sure these are set in your Vercel/Local .env file!
+        data.append('upload_preset', import.meta.env.VITE_UPLOAD_PRESET);
+        data.append('cloud_name', import.meta.env.VITE_CLOUD_NAME);
 
         try {
-            const res = await axios.post(`${API_URL}/api/users/upload/${type}`, data, {
-                headers: { "auth-token": token, "Content-Type": "multipart/form-data" }
-            });
-
-            // Adjust these keys based on your actual backend response!
-            const serverPath = res.data.url || res.data.path || res.data.filePath || res.data[fieldName];
-
-            if (serverPath) {
-                setFormData(prev => ({ ...prev, [fieldName]: serverPath }));
-            } else {
-                alert("Upload successful, but server didn't return a path. Check console.");
-            }
+            console.log(`🚀 Uploading ${type} to Cloudinary...`);
+            
+            // 3. Send directly to Cloudinary
+            const cloudName = import.meta.env.VITE_CLOUD_NAME;
+            const res = await axios.post(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, data);
+            
+            console.log("✅ Upload Success:", res.data.secure_url);
+            
+            // 4. Save the Permanent Cloudinary URL to the form
+            setFormData(prev => ({ ...prev, [fieldName]: res.data.secure_url }));
 
         } catch (err) {
-            console.error("Upload failed:", err);
-            alert("❌ Image upload failed. Please try again.");
+            console.error("❌ Cloudinary Upload failed:", err);
+            alert("Image upload failed. Please check your internet connection.");
+            
+            // Revert preview if failed
+            setFormData(prev => ({ ...prev, [fieldName]: oldImage })); 
         } finally {
             setIsUploading(false); // Unlock Save button
         }
@@ -612,7 +620,9 @@ function EditModal({ formData, setFormData, onClose, onSave }) {
 
                 <div className="p-6 border-t border-white/5 flex justify-end gap-3 sticky bottom-0 bg-[#111111]">
                     <button onClick={onClose} className="px-6 py-2 rounded-xl font-bold text-sm text-gray-400 hover:text-white transition">Cancel</button>
-                    <button onClick={onSave} disabled={isUploading} className="px-8 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-lg shadow-purple-500/20 transition disabled:opacity-50">Save Changes</button>
+                    <button onClick={onSave} disabled={isUploading} className="px-8 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-lg shadow-purple-500/20 transition disabled:opacity-50">
+                        {isUploading ? "Uploading..." : "Save Changes"}
+                    </button>
                 </div>
             </motion.div>
         </div>
