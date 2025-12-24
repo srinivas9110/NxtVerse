@@ -169,7 +169,7 @@ export default function Network() {
                                     {user.bannerImg && (
                                         <>
                                             <div 
-                                                className="absolute inset-0 bg-cover bg-center opacity-20 blur-md group-hover:opacity-30 group-hover:scale-110 transition-all duration-700"
+                                                className="absolute inset-0 bg-cover bg-center opacity-20 blur-sm group-hover:opacity-30 group-hover:scale-110 transition-all duration-700"
                                                 style={{ backgroundImage: `url(${getImg(user.bannerImg)})` }}
                                             />
                                             <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/80 to-transparent" />
