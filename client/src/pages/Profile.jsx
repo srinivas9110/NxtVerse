@@ -319,7 +319,7 @@ export default function Profile() {
                                 )}
                             </div>
 
-                            {/* Actions (FIXED LOGIC HERE) */}
+                            {/* Actions (FINAL FIXED LOGIC) */}
                             {isOwnProfile ? (
                                 <button
                                     onClick={() => setShowEditModal(true)}
@@ -329,30 +329,29 @@ export default function Profile() {
                                 </button>
                             ) : (
                                 <div className="flex flex-col gap-3">
-                                    {/* 1. MESSAGE BUTTON (Only if Connected) */}
-                                    {isConnected && (
+                                    
+                                    {/* 🟢 LOGIC FIXED: Only show ONE main button based on status */}
+                                    
+                                    {isConnected ? (
+                                        // CASE 1: CONNECTED -> Show Message Button
                                         <button
                                             onClick={() => navigate(`/messages`, { state: { startChat: formData } })}
-                                            className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+                                            className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 transition-all"
                                         >
                                             <MessageSquare size={16} /> Message
                                         </button>
-                                    )}
-
-                                    {/* 2. DYNAMIC CONNECT BUTTON */}
-                                    {isConnected ? (
-                                        <button className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-purple-500/30 border border-purple-400/20 transition-all">
-                                            <Zap size={16} /> Message
-                                        </button>
                                     ) : isSent ? (
+                                        // CASE 2: REQUEST SENT -> Show Pending
                                         <button disabled className="w-full py-3 rounded-xl bg-white/5 text-gray-500 border border-white/5 font-bold text-sm flex items-center justify-center gap-2 cursor-wait">
                                             <Clock size={16} className="animate-pulse" /> Pending
                                         </button>
                                     ) : isReceived ? (
+                                        // CASE 3: REQUEST RECEIVED -> Show Accept
                                         <button disabled className="w-full py-3 rounded-xl bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-bold text-sm flex items-center justify-center gap-2">
                                             <Check size={16} /> Accept Request
                                         </button>
                                     ) : (
+                                        // CASE 4: NOT CONNECTED -> Show Connect
                                         <button
                                             onClick={handleConnect}
                                             className="w-full py-3 rounded-xl bg-white/5 hover:bg-purple-600 hover:text-white text-gray-300 border border-white/10 hover:border-purple-500/50 font-bold text-sm transition-all flex items-center justify-center gap-2"

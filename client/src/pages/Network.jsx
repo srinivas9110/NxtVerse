@@ -43,6 +43,12 @@ export default function Network() {
         } catch (err) { alert("Link failed."); }
     };
 
+    // Helper to fix image paths (Cloudinary vs Local)
+    const getImg = (path) => {
+        if (!path) return null;
+        return (path.startsWith('http') || path.startsWith('blob')) ? path : `${API_URL}${path}`;
+    };
+
     // --- 3. FILTERING ---
     if (loading || !currentUser) return (
         <div className="h-screen bg-[#050505] flex items-center justify-center text-purple-500 font-mono text-xs tracking-widest animate-pulse">
@@ -156,92 +162,106 @@ export default function Network() {
                                     transition={{ delay: i * 0.05 }}
                                     onClick={() => navigate(`/profile/${user._id}`)}
                                     // ✨ THE NEON CARD STYLE ✨
-                                    className="group relative bg-[#0a0a0a] border border-white/5 rounded-[2rem] p-6 hover:border-purple-500/50 transition-all shadow-xl hover:shadow-[0_0_30px_rgba(168,85,247,0.15)] flex flex-col items-center text-center overflow-hidden cursor-pointer"
+                                    className="group relative bg-[#0a0a0a] border border-white/5 rounded-[2rem] p-6 hover:border-purple-500/50 transition-all shadow-xl hover:shadow-[0_0_30px_rgba(168,85,247,0.15)] flex flex-col items-center text-center overflow-hidden cursor-pointer h-80"
                                 >
                                     
-                                    {/* STATUS PILL (Top Left - Matching Screenshot) */}
-                                    <div className="w-full flex justify-start mb-6">
-                                        <div className={`px-3 py-1 rounded-full text-[10px] font-bold border tracking-widest uppercase flex items-center gap-1.5 ${user.role === 'faculty'
-                                            ? 'bg-orange-500/10 text-orange-400 border-orange-500/20'
-                                            : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                                            }`}>
-                                            {user.role === 'faculty' ? <ShieldCheck className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
-                                            {user.role}
-                                        </div>
-                                    </div>
+                                    {/* 🟢 BANNER BACKGROUND (Blurred) */}
+                                    {user.bannerImg && (
+                                        <>
+                                            <div 
+                                                className="absolute inset-0 bg-cover bg-center opacity-20 blur-md group-hover:opacity-30 group-hover:scale-110 transition-all duration-700"
+                                                style={{ backgroundImage: `url(${getImg(user.bannerImg)})` }}
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/80 to-transparent" />
+                                        </>
+                                    )}
 
-                                    {/* AVATAR (Circular with Gradient Ring) */}
-                                    <div className="relative mb-5 group-hover:scale-105 transition-transform duration-500">
-                                        <div className="w-24 h-24 rounded-full p-[2px] bg-gradient-to-br from-purple-500 to-blue-600 shadow-lg shadow-purple-900/40">
-                                            <div className="w-full h-full rounded-full bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
-                                                {user.profilePic ? (
-                                                    <img src={`${API_URL}${user.profilePic}`} className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <span className="text-3xl font-bold text-white group-hover:text-purple-300 transition-colors">
-                                                        {user.fullName.charAt(0)}
-                                                    </span>
-                                                )}
+                                    {/* Content Container (z-index ensures it sits above banner) */}
+                                    <div className="relative z-10 w-full flex flex-col h-full items-center">
+
+                                        {/* STATUS PILL */}
+                                        <div className="w-full flex justify-start mb-6">
+                                            <div className={`px-3 py-1 rounded-full text-[10px] font-bold border tracking-widest uppercase flex items-center gap-1.5 backdrop-blur-md ${user.role === 'faculty'
+                                                ? 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                                                : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                                                }`}>
+                                                {user.role === 'faculty' ? <ShieldCheck className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
+                                                {user.role}
                                             </div>
                                         </div>
-                                    </div>
 
-                                    {/* NAME & ID */}
-                                    <div className="w-full px-2 mb-6">
-                                        <h3 className="text-lg font-bold text-white mb-1 truncate w-full group-hover:text-purple-400 transition-colors" title={user.fullName}>
-                                            {user.fullName}
-                                        </h3>
-                                        <p className="text-xs text-gray-500 font-mono tracking-wide">{user.collegeId}</p>
-                                    </div>
-
-                                    {/* STATS CAPSULE */}
-                                    <div className="w-full grid grid-cols-2 gap-px bg-white/5 rounded-xl border border-white/5 overflow-hidden mb-6">
-                                        <div className="py-2.5 px-3 flex items-center justify-center gap-1.5 min-w-0">
-                                            <Layers className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-                                            <span className="text-xs text-gray-400 truncate max-w-full">
-                                                {user.course || "N/A"}
-                                            </span>
+                                        {/* AVATAR */}
+                                        <div className="relative mb-4 group-hover:scale-105 transition-transform duration-500">
+                                            <div className="w-24 h-24 rounded-full p-[2px] bg-gradient-to-br from-purple-500 to-blue-600 shadow-lg shadow-purple-900/40">
+                                                <div className="w-full h-full rounded-full bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
+                                                    {user.profilePic ? (
+                                                        <img src={getImg(user.profilePic)} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <span className="text-3xl font-bold text-white group-hover:text-purple-300 transition-colors">
+                                                            {user.fullName.charAt(0)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="py-2.5 px-3 flex items-center justify-center gap-1.5 min-w-0 bg-white/[0.02]">
-                                            <MapPin className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-                                            <span className="text-xs text-gray-400 truncate max-w-full">
-                                                Sec {user.section}
-                                            </span>
-                                        </div>
-                                    </div>
 
-                                    {/* ACTION BUTTON */}
-                                    <div className="w-full mt-auto">
-                                        {isConnected ? (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    navigate('/messages', { state: { startChat: user } })
-                                                }}
-                                                className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-purple-500/30 border border-purple-400/20 transition-all"
-                                            >
-                                                
-                                                <MessageSquare className="w-3.5 h-3.5" /> Message
-                                            </button>
-                                        ) : isSent ? (
-                                            <button disabled className="w-full py-3 rounded-xl bg-white/5 text-gray-500 font-bold text-xs border border-white/5 flex items-center justify-center gap-2 cursor-wait">
-                                                <Clock className="w-3.5 h-3.5 animate-pulse" /> Pending
-                                            </button>
-                                        ) : isReceived ? (
-                                            <button disabled className="w-full py-3 rounded-xl bg-yellow-500/10 text-yellow-500 font-bold text-xs border border-yellow-500/20 flex items-center justify-center gap-2">
-                                                <Check className="w-3.5 h-3.5" /> Accept
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleConnect(user._id)
-                                                }}
-                                                className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 hover:border-purple-500/50 font-bold text-xs transition-all flex items-center justify-center gap-2 group/btn"
-                                            >
-                                                <UserPlus className="w-3.5 h-3.5 group-hover/btn:scale-110 transition-transform" />
-                                                Connect
-                                            </button>
-                                        )}
+                                        {/* NAME & ID */}
+                                        <div className="w-full px-2 mb-4">
+                                            <h3 className="text-lg font-bold text-white mb-1 truncate w-full group-hover:text-purple-400 transition-colors drop-shadow-md" title={user.fullName}>
+                                                {user.fullName}
+                                            </h3>
+                                            <p className="text-xs text-gray-400 font-mono tracking-wide">{user.collegeId}</p>
+                                        </div>
+
+                                        {/* STATS CAPSULE */}
+                                        <div className="w-full grid grid-cols-2 gap-px bg-white/5 rounded-xl border border-white/5 overflow-hidden mb-auto backdrop-blur-sm">
+                                            <div className="py-2 px-3 flex items-center justify-center gap-1.5 min-w-0">
+                                                <Layers className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                                <span className="text-[10px] text-gray-300 truncate max-w-full font-bold">
+                                                    {user.course || "N/A"}
+                                                </span>
+                                            </div>
+                                            <div className="py-2 px-3 flex items-center justify-center gap-1.5 min-w-0 bg-white/[0.02]">
+                                                <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                                <span className="text-[10px] text-gray-300 truncate max-w-full font-bold">
+                                                    Sec {user.section}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* ACTION BUTTON */}
+                                        <div className="w-full mt-4">
+                                            {isConnected ? (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        navigate('/messages', { state: { startChat: user } })
+                                                    }}
+                                                    className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-500/30 border border-purple-400/20 transition-all backdrop-blur-md"
+                                                >
+                                                    <MessageSquare className="w-3.5 h-3.5" /> Message
+                                                </button>
+                                            ) : isSent ? (
+                                                <button disabled className="w-full py-2.5 rounded-xl bg-white/10 text-gray-400 font-bold text-xs border border-white/10 flex items-center justify-center gap-2 cursor-wait backdrop-blur-md">
+                                                    <Clock className="w-3.5 h-3.5 animate-pulse" /> Pending
+                                                </button>
+                                            ) : isReceived ? (
+                                                <button disabled className="w-full py-2.5 rounded-xl bg-yellow-500/20 text-yellow-400 font-bold text-xs border border-yellow-500/30 flex items-center justify-center gap-2 backdrop-blur-md">
+                                                    <Check className="w-3.5 h-3.5" /> Accept
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleConnect(user._id)
+                                                    }}
+                                                    className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 hover:border-purple-500/50 font-bold text-xs transition-all flex items-center justify-center gap-2 group/btn backdrop-blur-md"
+                                                >
+                                                    <UserPlus className="w-3.5 h-3.5 group-hover/btn:scale-110 transition-transform" />
+                                                    Connect
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </motion.div>
                             );
