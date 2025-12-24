@@ -6,7 +6,7 @@ import YouTube from 'react-youtube';
 import {
     Calendar, MapPin, Clock, Trash2, Plus, X,
     Send, Link as LinkIcon, ExternalLink, Image as ImageIcon,
-    Users, Shield, CheckCircle, Search, ArrowLeft, MessageSquare, Star, Zap, ThumbsUp, ThumbsDown
+    Users, Shield, CheckCircle, Search, ArrowLeft, MessageSquare, Star, Zap, Settings, PlayCircle, CheckSquare
 } from 'lucide-react';
 
 const getYoutubeId = (url) => {
@@ -16,7 +16,7 @@ const getYoutubeId = (url) => {
     return (match && match[2].length === 11) ? match[2] : null;
 };
 
-// --- CAFE STYLE FEEDBACK MODAL ---
+// ... (FeedbackModal Component stays exactly the same) ...
 const FeedbackModal = ({ onClose, onSubmit, submitting }) => {
     const [metrics, setMetrics] = useState({ pacing: '', clarity: '', vibe: '', overall: '' });
 
@@ -90,11 +90,14 @@ export default function ClubDetails() {
     const [newPost, setNewPost] = useState({ caption: '', link: '' });
     const [newWorkshop, setNewWorkshop] = useState({ title: '', date: '', time: '', venue: '', description: '' });
     const [uploading, setUploading] = useState(false);
-    const [showFeedbackModal, setShowFeedbackModal] = useState(null); // Stores workshopId
+    const [showFeedbackModal, setShowFeedbackModal] = useState(null);
+    const [statusMenuOpen, setStatusMenuOpen] = useState(null); // Which workshop's menu is open
 
     // Dashboard Modal
     const [dashboardModal, setDashboardModal] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
+
+    const [dashboardTab, setDashboardTab] = useState('attendees');
 
     // 1. Fetch Data
     useEffect(() => {
@@ -112,7 +115,7 @@ export default function ClubDetails() {
         fetchData();
     }, [id]);
 
-    // 2. Fetch Posts
+    // 2. Fetch Posts (Unchanged)
     useEffect(() => {
         if (activeTab === 'feed') {
             const fetchPosts = async () => {
@@ -126,7 +129,18 @@ export default function ClubDetails() {
         }
     }, [activeTab, id]);
 
-    // --- ACTIONS ---
+    // --- WORKSHOP ACTIONS ---
+
+    const handleUpdateStatus = async (workshopId, newStatus) => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.put(`${API_URL}/api/clubs/workshop/${workshopId}/status`, { status: newStatus }, { headers: { "auth-token": token } });
+            
+            // Optimistic Update
+            setWorkshops(workshops.map(w => w._id === workshopId ? { ...w, status: newStatus } : w));
+            setStatusMenuOpen(null);
+        } catch (err) { alert("Failed to update status"); }
+    };
 
     const handleAddWorkshop = async () => {
         if (!newWorkshop.title || !newWorkshop.date) return alert("Title and Date required!");
@@ -152,7 +166,7 @@ export default function ClubDetails() {
             const res = await axios.post(`${API_URL}/api/clubs/workshop/${workshopId}/register`, {}, { headers: { "auth-token": token } });
             alert(res.data.message);
             window.location.reload();
-        } catch (err) { alert("Error registering"); }
+        } catch (err) { alert(err.response?.data?.error || "Error registering"); }
     };
 
     const submitFeedback = async (metrics) => {
@@ -165,7 +179,7 @@ export default function ClubDetails() {
         } catch (err) { alert("Failed to send feedback"); }
     };
 
-    // --- DASHBOARD ACTIONS (Attendance & Organizers) ---
+    // --- DASHBOARD & FEED ACTIONS (Unchanged from previous) ---
     const handleMarkAttendance = async (workshopId, studentId) => {
         try {
             const token = localStorage.getItem('token');
@@ -186,7 +200,6 @@ export default function ClubDetails() {
         } catch (err) { alert(err.response?.data?.error || "Failed to update"); }
     };
 
-    // --- FEED ACTIONS ---
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -230,7 +243,7 @@ export default function ClubDetails() {
     const isFaculty = user?.role === 'faculty';
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white font-sans">
+        <div className="min-h-screen bg-[#050505] text-white font-sans" onClick={() => setStatusMenuOpen(null)}>
 
             {/* 1. HERO */}
             <div className="w-full h-[50vh] relative overflow-hidden bg-black group">
@@ -286,19 +299,53 @@ export default function ClubDetails() {
                             const isRegistered = user && workshop.attendees.some(a => a.user?._id === user._id);
                             const isOrganizer = user && (isFaculty || isPresident || workshop.organizers?.some(o => o._id === user._id));
                             const hasRated = user && workshop.attendees.find(a => a.user?._id === user._id)?.feedback?.submittedAt;
-                            const isEnded = new Date(workshop.date) < new Date();
+                            
+                            // 🟢 NEW: Status-based Logic
+                            const isLive = workshop.status === 'live';
+                            const isCompleted = workshop.status === 'completed';
 
                             return (
-                                <div key={workshop._id} className="bg-[#121214] border border-white/5 p-6 rounded-3xl flex flex-col md:flex-row gap-6 relative overflow-hidden group hover:border-purple-500/30 transition-all">
+                                <div key={workshop._id} className="bg-[#121214] border border-white/5 p-6 rounded-3xl flex flex-col md:flex-row gap-6 relative overflow-visible group hover:border-purple-500/30 transition-all">
+                                    
+                                    {/* DELETE BUTTON */}
                                     {(isFaculty || isPresident) && (
                                         <button onClick={(e) => { e.stopPropagation(); handleDeleteWorkshop(workshop._id); }} className="absolute top-4 right-4 p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all z-20"><Trash2 size={18} /></button>
                                     )}
-                                    <div className="bg-[#18181b] rounded-2xl p-4 flex flex-col items-center justify-center min-w-[80px] border border-white/5">
-                                        <span className="text-xs font-bold text-purple-400 uppercase">{new Date(workshop.date).toLocaleString('default', { month: 'short' })}</span>
+
+                                    {/* DATE CARD (with Status Indicator) */}
+                                    <div className="bg-[#18181b] rounded-2xl p-4 flex flex-col items-center justify-center min-w-[80px] border border-white/5 relative overflow-hidden">
+                                        {isLive && <div className="absolute top-0 left-0 w-full h-1 bg-red-500 animate-pulse" />}
+                                        {isCompleted && <div className="absolute top-0 left-0 w-full h-1 bg-green-500" />}
+                                        <span className={`text-xs font-bold uppercase ${isLive ? 'text-red-500' : isCompleted ? 'text-green-500' : 'text-purple-400'}`}>
+                                            {isLive ? 'LIVE' : isCompleted ? 'DONE' : new Date(workshop.date).toLocaleString('default', { month: 'short' })}
+                                        </span>
                                         <span className="text-3xl font-black text-white">{new Date(workshop.date).getDate()}</span>
                                     </div>
+
                                     <div className="flex-1 z-10">
-                                        <h3 className="text-2xl font-bold text-white mb-2">{workshop.title}</h3>
+                                        <div className="flex justify-between items-start">
+                                            <h3 className="text-2xl font-bold text-white mb-2">{workshop.title}</h3>
+                                            
+                                            {/* 🟢 NEW: STATUS MANAGER (President Only) */}
+                                            {isOrganizer && (
+                                                <div className="relative">
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); setStatusMenuOpen(statusMenuOpen === workshop._id ? null : workshop._id); }} 
+                                                        className="p-2 bg-[#18181b] border border-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
+                                                    >
+                                                        <Settings size={16} />
+                                                    </button>
+                                                    {statusMenuOpen === workshop._id && (
+                                                        <div className="absolute top-10 right-0 w-48 bg-[#18181b] border border-white/10 rounded-xl shadow-2xl p-2 z-50 flex flex-col gap-1">
+                                                            <button onClick={() => handleUpdateStatus(workshop._id, 'upcoming')} className={`text-xs font-bold p-3 rounded-lg text-left hover:bg-white/5 flex items-center gap-2 ${workshop.status === 'upcoming' ? 'text-purple-400' : 'text-gray-400'}`}><Calendar size={14} /> Upcoming</button>
+                                                            <button onClick={() => handleUpdateStatus(workshop._id, 'live')} className={`text-xs font-bold p-3 rounded-lg text-left hover:bg-white/5 flex items-center gap-2 ${workshop.status === 'live' ? 'text-red-500' : 'text-gray-400'}`}><PlayCircle size={14} /> Mark as Live</button>
+                                                            <button onClick={() => handleUpdateStatus(workshop._id, 'completed')} className={`text-xs font-bold p-3 rounded-lg text-left hover:bg-white/5 flex items-center gap-2 ${workshop.status === 'completed' ? 'text-green-500' : 'text-gray-400'}`}><CheckSquare size={14} /> Mark Completed</button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
                                         <div className="flex gap-4 text-sm text-gray-400 mb-2">
                                             <span className="flex items-center gap-1"><Clock size={14} /> {workshop.time}</span>
                                             <span className="flex items-center gap-1"><MapPin size={14} /> {workshop.venue}</span>
@@ -306,16 +353,28 @@ export default function ClubDetails() {
                                         <p className="text-gray-500 text-sm mb-4 line-clamp-2">{workshop.description}</p>
 
                                         <div className="flex gap-3">
-                                            {!isRegistered ? (
-                                                <button onClick={() => handleRegister(workshop._id)} className="px-6 py-2 bg-white text-black hover:bg-gray-200 rounded-lg font-bold transition-all">Register</button>
-                                            ) : isEnded ? (
+                                            {/* --- 🟢 SMART BUTTON LIFECYCLE --- */}
+                                            {isCompleted && isRegistered ? (
                                                 hasRated ? (
-                                                    <button disabled className="px-6 py-2 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-lg font-bold flex items-center gap-2 cursor-default"><Star size={16} fill="currentColor" /> Feedback Sent</button>
+                                                    <button disabled className="px-6 py-2 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-lg font-bold flex items-center gap-2 cursor-default">
+                                                        <Star size={16} fill="currentColor" /> Feedback Sent
+                                                    </button>
                                                 ) : (
-                                                    <button onClick={() => setShowFeedbackModal(workshop._id)} className="px-6 py-2 bg-gradient-to-r from-pink-600 to-purple-600 text-white rounded-lg font-bold flex items-center gap-2 hover:opacity-90 animate-pulse"><Star size={16} /> Rate Experience</button>
+                                                    <button onClick={() => setShowFeedbackModal(workshop._id)} className="px-6 py-2 bg-gradient-to-r from-pink-600 to-purple-600 text-white rounded-lg font-bold flex items-center gap-2 hover:opacity-90 animate-pulse">
+                                                        <Star size={16} /> Rate Experience
+                                                    </button>
+                                                )
+                                            ) : !isRegistered ? (
+                                                isLive || isCompleted ? (
+                                                    <button disabled className="px-6 py-2 bg-[#18181b] border border-white/5 text-gray-500 rounded-lg font-bold cursor-not-allowed">
+                                                        Registration Closed
+                                                    </button>
+                                                ) : (
+                                                    <button onClick={() => handleRegister(workshop._id)} className="px-6 py-2 bg-white text-black hover:bg-gray-200 rounded-lg font-bold transition-all">
+                                                        Register
+                                                    </button>
                                                 )
                                             ) : (
-                                                // ✅ FIX: Correctly mapping IDs for the chat state
                                                 <button 
                                                     onClick={() => navigate('/messages', { 
                                                         state: { 
@@ -324,7 +383,7 @@ export default function ClubDetails() {
                                                                 fullName: workshop.title + " - Announcements", 
                                                                 isGroup: true, 
                                                                 isAnnouncement: true, 
-                                                                groupAdmins: workshop.organizers.map(o => o._id) // ✅ Maps objects to IDs
+                                                                groupAdmins: workshop.organizers.map(o => o._id) 
                                                             } 
                                                         } 
                                                     })}
@@ -334,7 +393,7 @@ export default function ClubDetails() {
                                                 </button>
                                             )}
 
-                                            {isOrganizer && <button onClick={() => { setDashboardModal(workshop); setSearchTerm(""); }} className="px-4 py-2 bg-[#18181b] border border-white/10 hover:bg-white/5 text-white rounded-lg font-bold flex items-center gap-2 transition-all"><Users size={16} /> Dashboard</button>}
+                                            {isOrganizer && <button onClick={() => { setDashboardModal(workshop); setSearchTerm(""); setDashboardTab('attendees');}} className="px-4 py-2 bg-[#18181b] border border-white/10 hover:bg-white/5 text-white rounded-lg font-bold flex items-center gap-2 transition-all"><Users size={16} /> Dashboard</button>}
                                         </div>
                                     </div>
                                 </div>
@@ -343,7 +402,7 @@ export default function ClubDetails() {
                     </div>
                 )}
 
-                {/* FEED TAB */}
+                {/* FEED TAB (unchanged) */}
                 {activeTab === 'feed' && (
                     <div className="max-w-2xl mx-auto space-y-6">
                         {(isFaculty || isPresident) && (
@@ -379,34 +438,130 @@ export default function ClubDetails() {
                 )}
             </div>
 
-            {/* DASHBOARD MODAL */}
+            {/* DASHBOARD MODAL (Final Version with Stats) */}
             {dashboardModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
                     <div className="bg-[#09090b] border border-white/10 w-full max-w-2xl h-[80vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden">
+                        
+                        {/* HEADER */}
                         <div className="p-6 border-b border-white/10 bg-[#121214] flex justify-between items-start">
-                            <div><h2 className="text-2xl font-black text-white">{dashboardModal.title}</h2><p className="text-gray-500 text-sm font-bold">{dashboardModal.attendees?.length || 0} Registered • {dashboardModal.attendees?.filter(a => a.present).length || 0} Checked In</p></div>
+                            <div>
+                                <h2 className="text-2xl font-black text-white">{dashboardModal.title}</h2>
+                                <p className="text-gray-500 text-sm font-bold">
+                                    {dashboardModal.attendees?.length || 0} Registered • {dashboardModal.attendees?.filter(a => a.present).length || 0} Checked In
+                                </p>
+                            </div>
                             <button onClick={() => setDashboardModal(null)}><X className="text-gray-400 hover:text-white" /></button>
                         </div>
-                        <div className="p-4 bg-[#09090b] border-b border-white/10"><div className="relative"><Search className="absolute left-4 top-3.5 text-gray-500" size={18} /><input autoFocus placeholder="Search..." className="w-full bg-[#121214] border border-white/10 p-3 pl-12 rounded-xl text-white outline-none focus:border-purple-500 transition-colors" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div></div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#050505]">
-                            {dashboardModal.attendees?.filter(att => att.user?.fullName.toLowerCase().includes(searchTerm.toLowerCase())).map(att => {
-                                const isOrg = dashboardModal.organizers?.some(o => o._id === att.user._id);
-                                return (
-                                    <div key={att.user._id} className="flex justify-between items-center p-4 bg-[#121214] rounded-xl border border-white/5 hover:border-white/10 transition-all group">
-                                        <div><h4 className="font-bold text-white text-base">{att.user.fullName}</h4><p className="text-xs text-gray-500 font-mono mt-0.5 uppercase">{att.user.collegeId}</p></div>
-                                        <div className="flex items-center gap-3">
-                                            {isFaculty && <button onClick={() => handleToggleOrganizer(dashboardModal._id, att.user._id)} className={`p-2 rounded-lg transition-all ${isOrg ? 'text-purple-400 bg-purple-500/10' : 'text-gray-600 hover:text-gray-400'}`}><Shield size={18} fill={isOrg ? "currentColor" : "none"} /></button>}
-                                            <button onClick={() => handleMarkAttendance(dashboardModal._id, att.user._id)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all border ${att.present ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-[#18181b] text-gray-400 border-white/10 hover:bg-white/5'}`}>{att.present ? "Present" : "Mark"}</button>
-                                        </div>
-                                    </div>
-                                )
-                            })}
+
+                        {/* TABS SWITCHER */}
+                        <div className="flex border-b border-white/10">
+                            <button 
+                                onClick={() => setDashboardTab('attendees')} 
+                                className={`flex-1 py-3 text-sm font-bold transition-colors ${dashboardTab === 'attendees' ? 'bg-[#18181b] text-white border-b-2 border-purple-500' : 'text-gray-500 hover:text-gray-300'}`}
+                            >
+                                Attendees
+                            </button>
+                            <button 
+                                onClick={() => setDashboardTab('stats')} 
+                                className={`flex-1 py-3 text-sm font-bold transition-colors ${dashboardTab === 'stats' ? 'bg-[#18181b] text-white border-b-2 border-purple-500' : 'text-gray-500 hover:text-gray-300'}`}
+                            >
+                                Analytics 📊
+                            </button>
                         </div>
+
+                        {/* CONTENT AREA */}
+                        {dashboardTab === 'attendees' ? (
+                            <>
+                                <div className="p-4 bg-[#09090b] border-b border-white/10">
+                                    <div className="relative">
+                                        <Search className="absolute left-4 top-3.5 text-gray-500" size={18} />
+                                        <input autoFocus placeholder="Search student..." className="w-full bg-[#121214] border border-white/10 p-3 pl-12 rounded-xl text-white outline-none focus:border-purple-500 transition-colors" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#050505]">
+                                    {dashboardModal.attendees?.filter(att => att.user?.fullName.toLowerCase().includes(searchTerm.toLowerCase())).map(att => {
+                                        const isOrg = dashboardModal.organizers?.some(o => o._id === att.user._id);
+                                        return (
+                                            <div key={att.user._id} className="flex justify-between items-center p-4 bg-[#121214] rounded-xl border border-white/5 hover:border-white/10 transition-all group">
+                                                <div><h4 className="font-bold text-white text-base">{att.user.fullName}</h4><p className="text-xs text-gray-500 font-mono mt-0.5 uppercase">{att.user.collegeId}</p></div>
+                                                <div className="flex items-center gap-3">
+                                                    {isFaculty && <button onClick={() => handleToggleOrganizer(dashboardModal._id, att.user._id)} className={`p-2 rounded-lg transition-all ${isOrg ? 'text-purple-400 bg-purple-500/10' : 'text-gray-600 hover:text-gray-400'}`}><Shield size={18} fill={isOrg ? "currentColor" : "none"} /></button>}
+                                                    <button onClick={() => handleMarkAttendance(dashboardModal._id, att.user._id)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all border ${att.present ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-[#18181b] text-gray-400 border-white/10 hover:bg-white/5'}`}>{att.present ? "Present" : "Mark"}</button>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </>
+                        ) : (
+                            // --- 📊 ANALYTICS TAB CONTENT ---
+                            <div className="flex-1 overflow-y-auto p-6 bg-[#050505] space-y-6">
+                                {(() => {
+                                    // Filter out people who haven't submitted feedback yet
+                                    const feedbacks = dashboardModal.attendees.map(a => a.feedback).filter(f => f && f.submittedAt);
+                                    
+                                    if (feedbacks.length === 0) return (
+                                        <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-4 opacity-50">
+                                            <Star size={48} />
+                                            <p>No feedback submitted yet.</p>
+                                        </div>
+                                    );
+
+                                    const count = (field, value) => feedbacks.filter(f => f[field] === value).length;
+                                    const total = feedbacks.length;
+                                    const percent = (val) => total === 0 ? '0%' : Math.round((val / total) * 100) + '%';
+
+                                    return (
+                                        <>
+                                            {/* Overall Verdict Cards */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="bg-green-500/10 border border-green-500/20 p-4 rounded-2xl flex items-center justify-between">
+                                                    <div><p className="text-green-400 font-bold uppercase text-xs">Positive</p><p className="text-3xl font-black text-white">{count('overall', '👍')}</p></div>
+                                                    <ThumbsUp size={32} className="text-green-500 opacity-50" />
+                                                </div>
+                                                <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl flex items-center justify-between">
+                                                    <div><p className="text-red-400 font-bold uppercase text-xs">Negative</p><p className="text-3xl font-black text-white">{count('overall', '👎')}</p></div>
+                                                    <ThumbsDown size={32} className="text-red-500 opacity-50" />
+                                                </div>
+                                            </div>
+
+                                            {/* Detailed Progress Bars */}
+                                            <div className="space-y-4">
+                                                {[
+                                                    { label: '🧠 Pacing', field: 'pacing', options: ['Too Slow', 'Perfect', 'Too Fast'], colors: ['text-blue-400', 'text-green-400', 'text-orange-400'] },
+                                                    { label: '💎 Clarity', field: 'clarity', options: ['Confusing', 'Clear', 'Mind-blowing'], colors: ['text-red-400', 'text-blue-400', 'text-purple-400'] },
+                                                    { label: '🔥 Vibe', field: 'vibe', options: ['Sleepy', 'Okay', 'Hype'], colors: ['text-gray-400', 'text-yellow-400', 'text-orange-500'] }
+                                                ].map(metric => (
+                                                    <div key={metric.field} className="bg-[#121214] border border-white/5 p-4 rounded-2xl">
+                                                        <h4 className="font-bold text-gray-400 text-sm mb-3 uppercase">{metric.label}</h4>
+                                                        <div className="space-y-2">
+                                                            {metric.options.map((opt, i) => {
+                                                                const val = count(metric.field, opt);
+                                                                return (
+                                                                    <div key={opt} className="flex items-center gap-3">
+                                                                        <span className={`text-xs font-bold w-24 truncate ${metric.colors[i]}`}>{opt}</span>
+                                                                        <div className="flex-1 h-2 bg-[#18181b] rounded-full overflow-hidden">
+                                                                            <div className="h-full bg-white/20 transition-all duration-500" style={{ width: percent(val), backgroundColor: 'currentColor' }}></div>
+                                                                        </div>
+                                                                        <span className="text-xs font-mono text-gray-500 w-8 text-right">{val}</span>
+                                                                    </div>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
 
-            {/* FEEDBACK MODAL (NEW) */}
+            {/* FEEDBACK MODAL */}
             {showFeedbackModal && <FeedbackModal onClose={() => setShowFeedbackModal(null)} onSubmit={submitFeedback} submitting={false} />}
         </div>
     );

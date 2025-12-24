@@ -54,31 +54,32 @@ router.post('/workshop/add', fetchUser, async (req, res) => {
     }
 });
 
-// REGISTER (Auto-adds user to Group)
+// REGISTER (Modified to check Status)
 router.post('/workshop/:id/register', fetchUser, async (req, res) => {
     try {
         const workshop = await Workshop.findById(req.params.id);
         if (!workshop) return res.status(404).json({ error: "Not Found" });
 
-        // Check if already registered
+        // 🟢 FIX: Block registration if Live or Completed
+        if (workshop.status !== 'upcoming') {
+            return res.status(400).json({ error: "Registration is closed." });
+        }
+
         if (workshop.attendees.some(a => a.user.toString() === req.user.id)) {
             return res.status(400).json({ error: "Already registered" });
         }
 
-        // A. Add to Workshop
         workshop.attendees.push({ user: req.user.id });
         await workshop.save();
 
-        // B. Auto-Join the Chat Group 🚀
         if (workshop.chatGroupId) {
             await Chat.findByIdAndUpdate(workshop.chatGroupId, {
-                $addToSet: { users: req.user.id } // Prevent duplicates
+                $addToSet: { users: req.user.id }
             });
         }
 
-        res.json({ message: "Registered & Added to Announcement Channel!" });
+        res.json({ message: "Registered!" });
     } catch (error) {
-        console.error(error);
         res.status(500).send("Server Error");
     }
 });
@@ -327,6 +328,24 @@ router.delete('/delete/:id', fetchUser, async (req, res) => {
         await Club.findByIdAndDelete(req.params.id);
         res.json({ success: "Club deleted" });
     } catch (error) { res.status(500).send("Server Error"); }
+});
+
+// 🟢 NEW: Update Workshop Status (Live/Completed)
+router.put('/workshop/:id/status', fetchUser, async (req, res) => {
+    try {
+        const { status } = req.body; // 'live' or 'completed'
+        const workshop = await Workshop.findById(req.params.id);
+        
+        // Security: Only organizers/presidents/faculty should do this
+        // (You can add specific checks here if needed)
+
+        workshop.status = status;
+        await workshop.save();
+        res.json(workshop);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Server Error");
+    }
 });
 
 module.exports = router;

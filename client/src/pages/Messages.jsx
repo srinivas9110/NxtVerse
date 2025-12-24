@@ -212,13 +212,15 @@ export default function Messages() {
                                             {msg.text}
                                             <p className="text-[9px] text-right opacity-60 mt-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
 
-                                            {/* Reaction Picker Trigger */}
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); setShowReactionPicker(showReactionPicker === msg._id ? null : msg._id); }}
-                                                className={`absolute -top-3 p-1 rounded-full bg-[#18181b] border border-white/10 text-gray-400 hover:text-yellow-400 hover:scale-110 transition-all opacity-0 group-hover:opacity-100 shadow-sm ${isMe ? '-left-3' : '-right-3'}`}
-                                            >
-                                                <Smile size={14} />
-                                            </button>
+                                            {/* 🟢 FIX: Only show reaction picker if it is NOT me */}
+                                            {!isMe && (
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); setShowReactionPicker(showReactionPicker === msg._id ? null : msg._id); }}
+                                                    className="absolute -top-3 -right-3 p-1 rounded-full bg-[#18181b] border border-white/10 text-gray-400 hover:text-yellow-400 hover:scale-110 transition-all opacity-0 group-hover:opacity-100 shadow-sm"
+                                                >
+                                                    <Smile size={14} />
+                                                </button>
+                                            )}
 
                                             {/* Reaction Picker Popover */}
                                             {showReactionPicker === msg._id && (

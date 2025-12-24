@@ -8,15 +8,18 @@ const WorkshopSchema = new mongoose.Schema({
     venue: String,
     description: String,
     organizers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-    
-    // 👇 NEW: The WhatsApp-killer Group ID
     chatGroupId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chat' },
+
+    // 🟢 NEW: Manual Lifecycle Status
+    status: { 
+        type: String, 
+        enum: ['upcoming', 'live', 'completed'], 
+        default: 'upcoming' 
+    },
 
     attendees: [{
         user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         present: { type: Boolean, default: false },
-        
-        // 👇 NEW: "Cafe Style" Micro-Feedback
         feedback: {
             pacing: { type: String, enum: ['Too Slow', 'Perfect', 'Too Fast'] },
             clarity: { type: String, enum: ['Confusing', 'Clear', 'Mind-blowing'] },
