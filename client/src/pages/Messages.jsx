@@ -86,7 +86,7 @@ export default function Messages() {
                 sender: currentUser._id,
                 text: newMessage,
                 timestamp: new Date(),
-                reactions: [] // Init empty reactions
+                reactions: []
             };
             
             setMessages([...messages, tempMsg]);
@@ -103,25 +103,23 @@ export default function Messages() {
 
     // 5. Handle Reaction Toggle
     const handleReaction = async (msgId, emoji) => {
-        // Optimistic UI Update
         const updatedMessages = messages.map(msg => {
             if (msg._id === msgId) {
                 const existingIdx = msg.reactions?.findIndex(r => r.user === currentUser._id && r.emoji === emoji);
                 let newReactions = msg.reactions ? [...msg.reactions] : [];
                 
                 if (existingIdx > -1) {
-                    newReactions.splice(existingIdx, 1); // Remove
+                    newReactions.splice(existingIdx, 1); 
                 } else {
-                    newReactions.push({ user: currentUser._id, emoji }); // Add
+                    newReactions.push({ user: currentUser._id, emoji });
                 }
                 return { ...msg, reactions: newReactions };
             }
             return msg;
         });
         setMessages(updatedMessages);
-        setShowReactionPicker(null); // Close picker
+        setShowReactionPicker(null);
 
-        // API Call
         try {
             const token = localStorage.getItem('token');
             await axios.put(`${API_URL}/api/messages/react/${msgId}`, { emoji }, {
@@ -136,7 +134,6 @@ export default function Messages() {
 
     const canChat = !selectedContact?.isAnnouncement || isAdmin;
 
-    // Helper: Group reactions for display (e.g., { '👍': 5, '🔥': 2 })
     const getGroupedReactions = (reactions) => {
         if (!reactions) return {};
         return reactions.reduce((acc, r) => {
@@ -205,55 +202,56 @@ export default function Messages() {
                             const reactions = getGroupedReactions(msg.reactions);
 
                             return (
-                                <div key={idx} className={`z-10 flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[85%] self-${isMe ? 'end' : 'start'} group relative mb-2`}>
-                                    {!isMe && selectedContact.isGroup && (
-                                        <span className="text-[10px] text-gray-400 ml-2 mb-1">{senderName}</span>
-                                    )}
-                                    
-                                    <div className={`px-4 py-2 rounded-2xl shadow-md text-sm leading-relaxed relative ${isMe ? 'bg-purple-600 text-white rounded-tr-none' : 'bg-[#202c33] text-gray-200 rounded-tl-none'}`}>
-                                        {msg.text}
+                                <div key={idx} className={`z-10 flex ${isMe ? 'justify-end' : 'justify-start'} group mb-4`}>
+                                    <div className="flex flex-col max-w-[75%] relative">
+                                        {!isMe && selectedContact.isGroup && (
+                                            <span className="text-[10px] text-gray-400 ml-2 mb-1">{senderName}</span>
+                                        )}
                                         
-                                        {/* Reaction Picker Button (Shows on Hover) */}
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); setShowReactionPicker(showReactionPicker === msg._id ? null : msg._id); }}
-                                            className={`absolute -right-8 top-1 p-1.5 rounded-full bg-[#18181b] border border-white/10 text-gray-400 hover:text-yellow-400 hover:scale-110 transition-all opacity-0 group-hover:opacity-100 ${isMe ? '-left-8 right-auto' : ''}`}
-                                        >
-                                            <Smile size={14} />
-                                        </button>
+                                        <div className={`px-4 py-2 rounded-2xl shadow-md text-sm leading-relaxed relative ${isMe ? 'bg-purple-600 text-white rounded-tr-none' : 'bg-[#202c33] text-gray-200 rounded-tl-none'}`}>
+                                            {msg.text}
+                                            <p className="text-[9px] text-right opacity-60 mt-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
 
-                                        {/* Reaction Picker Popover */}
-                                        {showReactionPicker === msg._id && (
-                                            <div className="absolute -top-10 left-0 bg-[#18181b] border border-white/10 rounded-full px-2 py-1 flex gap-1 shadow-xl z-50 animate-in zoom-in-95">
-                                                {['👍', '❤️', '🔥', '😂', '😮'].map(emoji => (
+                                            {/* Reaction Picker Trigger */}
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); setShowReactionPicker(showReactionPicker === msg._id ? null : msg._id); }}
+                                                className={`absolute -top-3 p-1 rounded-full bg-[#18181b] border border-white/10 text-gray-400 hover:text-yellow-400 hover:scale-110 transition-all opacity-0 group-hover:opacity-100 shadow-sm ${isMe ? '-left-3' : '-right-3'}`}
+                                            >
+                                                <Smile size={14} />
+                                            </button>
+
+                                            {/* Reaction Picker Popover */}
+                                            {showReactionPicker === msg._id && (
+                                                <div className="absolute -top-12 left-0 bg-[#18181b] border border-white/10 rounded-full px-2 py-1 flex gap-1 shadow-xl z-50 animate-in zoom-in-95">
+                                                    {['👍', '❤️', '🔥', '😂', '😮'].map(emoji => (
+                                                        <button 
+                                                            key={emoji} 
+                                                            onClick={() => handleReaction(msg._id, emoji)}
+                                                            className="hover:scale-125 transition-transform p-1 text-lg"
+                                                        >
+                                                            {emoji}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Display Reactions */}
+                                        {Object.keys(reactions).length > 0 && (
+                                            <div className={`flex gap-1 mt-1 flex-wrap ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                                {Object.entries(reactions).map(([emoji, count]) => (
                                                     <button 
-                                                        key={emoji} 
+                                                        key={emoji}
                                                         onClick={() => handleReaction(msg._id, emoji)}
-                                                        className="hover:scale-125 transition-transform p-1 text-lg"
+                                                        className="text-[10px] bg-[#18181b] border border-white/5 rounded-full px-2 py-0.5 text-gray-300 flex items-center gap-1 hover:bg-white/10 shadow-sm"
                                                     >
-                                                        {emoji}
+                                                        <span>{emoji}</span>
+                                                        <span className="font-bold">{count}</span>
                                                     </button>
                                                 ))}
                                             </div>
                                         )}
                                     </div>
-
-                                    {/* Display Reactions */}
-                                    {Object.keys(reactions).length > 0 && (
-                                        <div className="flex gap-1 mt-1 flex-wrap">
-                                            {Object.entries(reactions).map(([emoji, count]) => (
-                                                <button 
-                                                    key={emoji}
-                                                    onClick={() => handleReaction(msg._id, emoji)}
-                                                    className="text-[10px] bg-[#18181b] border border-white/5 rounded-full px-2 py-0.5 text-gray-300 flex items-center gap-1 hover:bg-white/10"
-                                                >
-                                                    <span>{emoji}</span>
-                                                    <span className="font-bold">{count}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    <p className="text-[9px] text-gray-500 mt-0.5 text-right w-full pr-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                 </div>
                             );
                         })}
