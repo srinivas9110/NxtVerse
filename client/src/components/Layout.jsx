@@ -37,7 +37,7 @@ export default function Layout() {
     const pulseMessages = [
         "NxtVerse Networking",
         `${activeUsers} PEERS ACTIVE`,
-        "Still in development",
+        "Digital Campus",
     ];
 
     const calendarRef = useRef(null);
@@ -140,7 +140,7 @@ export default function Layout() {
         <div className="flex min-h-screen bg-[#050505] text-white font-sans selection:bg-purple-500/30 hide-scrollbar">
 
             {/* SIDEBAR */}
-            <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#09090b] border-r border-white/5 transform transition-transform duration-300 md:translate-x-0  hide-scrollbar ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#09090b] border-r border-white/5 transform transition-transform duration-300 md:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 <div className="h-16 flex items-center gap-3 px-6 border-b border-white/5">
                     <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
                         <span className="font-bold text-white">N</span>
@@ -149,7 +149,7 @@ export default function Layout() {
                     <button onClick={() => setMobileMenuOpen(false)} className="md:hidden ml-auto text-gray-500"><X size={20} /></button>
                 </div>
 
-                <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100vh-8rem)] custom-scrollbar">
+                <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100vh-8rem)] hide-scrollbar">
                     <NavItem to="/dashboard" icon={<LayoutGrid size={18} />} label="Lobby" active={isActive('/dashboard')} />
                     <NavItem to="/network" icon={<Users size={18} />} label="Peers" active={isActive('/network')} />
                     <NavItem to="/hackathons" icon={<Trophy size={18} />} label="Hackathons" active={isActive('/hackathons')} />
