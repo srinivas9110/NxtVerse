@@ -15,7 +15,7 @@ export default function Layout() {
     const navigate = useNavigate();
 
     // States
-    const [user, setUser] = useState({ name: "Student", section: "...", role: "student" });
+    const [user, setUser] = useState({ name: "Student", section: "...", role: "student", profilePic: null});
     const [requests, setRequests] = useState([]);
     const [calendarEvents, setCalendarEvents] = useState([]);
 
@@ -65,7 +65,7 @@ export default function Layout() {
         if (token) {
             // 1. Get User Data
             axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } })
-                .then(res => setUser({ name: res.data.fullName, section: res.data.section || "S1", role: res.data.role }))
+                .then(res => setUser({ name: res.data.fullName, section: res.data.section || "S1", role: res.data.role, profilePic: res.data.profilePic }))
                 .catch(() => { });
 
             // 2. Fetch Notifications (Periodic)
