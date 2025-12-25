@@ -172,4 +172,41 @@ router.put('/react/:id', fetchUser, async (req, res) => {
     }
 });
 
+// @route   DELETE /api/messages/delete/:id
+// @desc    Delete entire conversation (Group or DM)
+router.delete('/delete/:id', fetchUser, async (req, res) => {
+    try {
+        const targetId = req.params.id; // Can be GroupId OR UserId (for DMs)
+        const myId = req.user.id;
+
+        // Check if it's a Group
+        const isGroup = await Chat.findById(targetId);
+
+        if (isGroup) {
+            // A. Delete Group Chat (Only Admin should really do this, or just leave?)
+            // For now, let's say deleting a group chat deletes the group itself if admin
+            if (isGroup.groupAdmins.includes(myId)) {
+                await Message.deleteMany({ chat: targetId });
+                await Chat.findByIdAndDelete(targetId);
+                return res.json({ success: "Group deleted" });
+            } else {
+                return res.status(403).json({ error: "Only admins can delete the group" });
+            }
+        } else {
+            // B. Delete DM History
+            // We delete messages where (sender=Me, receiver=Target) OR (sender=Target, receiver=Me)
+            await Message.deleteMany({
+                $or: [
+                    { sender: myId, receiver: targetId },
+                    { sender: targetId, receiver: myId }
+                ]
+            });
+            return res.json({ success: "Chat history cleared" });
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Server Error");
+    }
+});
+
 module.exports = router;

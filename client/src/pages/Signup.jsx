@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { API_URL } from '../config';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { Hexagon, ChevronDown, Loader2 } from 'lucide-react'; // Added icons for modern feel
 
 export default function Signup() {
     const navigate = useNavigate();
@@ -11,7 +12,7 @@ export default function Signup() {
         email: '',
         password: '',
         section: '',
-        course: '' // Auto-filled based on ID
+        course: '' 
     });
 
     const [message, setMessage] = useState('');
@@ -21,21 +22,14 @@ export default function Signup() {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    // --- 🧠 LOGIC TO DETECT STREAM FROM ID ---
+    // --- 🧠 LOGIC: DETECT STREAM FROM ID ---
     const detectStream = (id) => {
         const upperId = id.toUpperCase();
-
-        // 1. Faculty Check
         if (upperId.startsWith('NW')) return 'FACULTY';
-
-        // 2. Student Check (Based on the 7th character: N24H01[A/B]...)
-        // Index 012345[6]
+        
         const discriminator = upperId.charAt(6);
-
-        if (discriminator === 'A') return 'BSC';   // 'A' indicates B.Sc
-        if (discriminator === 'B') return 'BTECH'; // 'B' indicates B.Tech
-
-        // Fallback (Should be caught by validation, but just in case)
+        if (discriminator === 'A') return 'BSC';   
+        if (discriminator === 'B') return 'BTECH'; 
         return 'BTECH';
     };
 
@@ -44,36 +38,24 @@ export default function Signup() {
         setLoading(true);
         setMessage('');
 
-        // 1. Validation Regex
-        // N + 2 digits + H + 2 digits + [A or B] + 4 digits
-        // Example: N24H01A0268
         const studentPattern = /^N\d{2}H\d{2}[AB]\d{4}$/i;
         const facultyPattern = /^NW000\d{4}$/i;
-
         const isFaculty = facultyPattern.test(formData.collegeId);
         const isStudent = studentPattern.test(formData.collegeId);
 
         if (!isStudent && !isFaculty) {
             setLoading(false);
-            setMessage("❌ Invalid ID. Must contain 'A' (B.Sc) or 'B' (B.Tech).");
+            setMessage("❌ Invalid ID. Format: N24H01A0268");
             return;
         }
 
-        // 2. Auto-Detect Stream
         const detectedCourse = detectStream(formData.collegeId);
-
-        // Prepare final data payload
-        const finalData = {
-            ...formData,
-            course: detectedCourse // 👈 Auto-filled here (BSC or BTECH)
-        };
+        const finalData = { ...formData, course: detectedCourse };
 
         try {
             const res = await axios.post(`${API_URL}/api/auth/signup`, finalData);
             setMessage("✅ " + res.data.message);
-            setTimeout(() => {
-                navigate('/login');
-            }, 2000);
+            setTimeout(() => navigate('/login'), 2000);
         } catch (err) {
             setMessage("❌ " + (err.response?.data?.message || "Signup Failed"));
         } finally {
@@ -81,75 +63,132 @@ export default function Signup() {
         }
     };
 
-    // Helper for Section Options
+    // Helper for Section Options (Styled for Dark Mode)
     const renderSectionOptions = () => {
         const s_batches = [];
         const ib_batches = [];
-        for (let i = 1; i <= 10; i++) s_batches.push(<option key={`S${i}`} value={`S${i}`}>S{i}</option>);
-        for (let i = 1; i <= 10; i++) ib_batches.push(<option key={`IB${i}`} value={`IB${i}`}>IB{i}</option>);
+        for (let i = 1; i <= 10; i++) s_batches.push(<option key={`S${i}`} value={`S${i}`} className="bg-[#121214] text-gray-300">S{i}</option>);
+        for (let i = 1; i <= 10; i++) ib_batches.push(<option key={`IB${i}`} value={`IB${i}`} className="bg-[#121214] text-gray-300">IB{i}</option>);
         return (
             <>
-                <optgroup label="Standard Sections" className="bg-gray-800 text-white">{s_batches}</optgroup>
-                <optgroup label="Internship Batches (IB)" className="bg-gray-800 text-white">{ib_batches}</optgroup>
+                <optgroup label="Standard Sections" className="bg-[#09090b] text-purple-400 font-bold">{s_batches}</optgroup>
+                <optgroup label="Internship Batches (IB)" className="bg-[#09090b] text-blue-400 font-bold">{ib_batches}</optgroup>
             </>
         );
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-nxt-bg text-white relative overflow-hidden">
-            {/* Background Effects */}
-            <div className="fixed top-0 left-0 w-96 h-96 bg-nxt-accent opacity-20 blur-[120px] rounded-full -translate-x-1/2 -translate-y-1/2 animate-blob"></div>
-            <div className="fixed bottom-0 right-0 w-96 h-96 bg-nxt-purple opacity-20 blur-[120px] rounded-full translate-x-1/2 translate-y-1/2 animate-blob animation-delay-2000"></div>
+        <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4 relative overflow-hidden font-sans selection:bg-purple-500/30">
+            
+            {/* Background Atmosphere */}
+            <div className="fixed inset-0 pointer-events-none">
+                <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-purple-900/20 rounded-full blur-[120px]" />
+                <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-blue-900/20 rounded-full blur-[120px]" />
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20" />
+            </div>
 
-            <div className="w-full max-w-md glass p-8 rounded-2xl relative z-10 m-4 shadow-2xl shadow-blue-900/20 border border-white/10">
+            <div className="w-full max-w-md bg-[#111111]/80 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl relative z-10">
+                
+                {/* Header */}
                 <div className="text-center mb-8">
-                    <h2 className="text-4xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-                        Join NxtVerse
-                    </h2>
-                    <p className="text-gray-400 text-sm">The exclusive network for our campus.</p>
+                    <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-purple-500/20">
+                        <Hexagon className="text-white fill-white/20" size={24} />
+                    </div>
+                    <h2 className="text-3xl font-bold tracking-tight">Join NxtVerse</h2>
+                    <p className="text-gray-500 text-sm mt-2">Initialize your neural link to the campus grid.</p>
                 </div>
 
+                {/* Feedback Message */}
                 {message && (
-                    <div className={`mb-6 p-3 rounded-lg text-sm font-medium border text-center animate-pulse ${message.includes("✅") ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"}`}>
+                    <div className={`mb-6 p-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-2 ${message.includes("✅") ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"}`}>
                         {message}
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-                    <div className="group">
-                        <input type="text" name="fullName" placeholder="Full Name" onChange={handleChange} className="w-full p-3.5 rounded-xl bg-gray-900/50 border border-white/10 focus:border-nxt-accent focus:bg-gray-900/80 outline-none transition-all placeholder:text-gray-600 text-white" required />
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    
+                    {/* Full Name */}
+                    <div>
+                        <input 
+                            type="text" 
+                            name="fullName" 
+                            placeholder="Full Name" 
+                            onChange={handleChange} 
+                            className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:border-purple-500 focus:bg-[#0f0f0f] outline-none transition-all" 
+                            required 
+                        />
                     </div>
 
-                    <div className="group">
-                        <input type="text" name="collegeId" placeholder="ID Number (e.g. N24H01A0268)" onChange={handleChange} className="w-full p-3.5 rounded-xl bg-gray-900/50 border border-white/10 focus:border-nxt-accent focus:bg-gray-900/80 outline-none uppercase placeholder:text-gray-600 text-white transition-all" required />
+                    {/* College ID */}
+                    <div>
+                        <input 
+                            type="text" 
+                            name="collegeId" 
+                            placeholder="ID Number (e.g. N24H01A0268)" 
+                            onChange={handleChange} 
+                            className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:border-purple-500 focus:bg-[#0f0f0f] outline-none transition-all uppercase tracking-wider font-mono" 
+                            required 
+                        />
                     </div>
 
-                    {/* NO STREAM DROPDOWN - Logic handles it */}
-
+                    {/* Section Dropdown (Fixed styling) */}
                     <div className="relative group">
-                        <select name="section" onChange={handleChange} defaultValue="" className="w-full p-3.5 rounded-xl bg-gray-900/50 border border-white/10 focus:border-nxt-accent focus:bg-gray-900/80 outline-none text-white appearance-none cursor-pointer transition-all" required>
-                            <option value="" disabled>Select Your Section</option>
+                        <select 
+                            name="section" 
+                            onChange={handleChange} 
+                            defaultValue="" 
+                            className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white appearance-none cursor-pointer focus:border-purple-500 focus:bg-[#0f0f0f] outline-none transition-all" 
+                            required
+                        >
+                            <option value="" disabled className="bg-[#121214] text-gray-500">Select Your Section</option>
                             {renderSectionOptions()}
                         </select>
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500 group-focus-within:text-nxt-accent transition-colors">▼</div>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none group-hover:text-purple-400 transition-colors" size={16} />
                     </div>
 
-                    <div className="group">
-                        <input type="email" name="email" placeholder="College Email" onChange={handleChange} className="w-full p-3.5 rounded-xl bg-gray-900/50 border border-white/10 focus:border-nxt-accent focus:bg-gray-900/80 outline-none placeholder:text-gray-600 text-white transition-all" required />
+                    {/* Email */}
+                    <div>
+                        <input 
+                            type="email" 
+                            name="email" 
+                            placeholder="College Email" 
+                            onChange={handleChange} 
+                            className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:border-purple-500 focus:bg-[#0f0f0f] outline-none transition-all" 
+                            required 
+                        />
                     </div>
 
-                    <div className="group">
-                        <input type="password" name="password" placeholder="Password" onChange={handleChange} className="w-full p-3.5 rounded-xl bg-gray-900/50 border border-white/10 focus:border-nxt-accent focus:bg-gray-900/80 outline-none placeholder:text-gray-600 text-white transition-all" required />
+                    {/* Password */}
+                    <div>
+                        <input 
+                            type="password" 
+                            name="password" 
+                            placeholder="Password" 
+                            onChange={handleChange} 
+                            className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:border-purple-500 focus:bg-[#0f0f0f] outline-none transition-all" 
+                            required 
+                        />
                     </div>
 
-                    <button type="submit" disabled={loading} className="mt-2 w-full bg-gradient-to-r from-nxt-accent to-nxt-purple hover:opacity-90 hover:scale-[1.02] active:scale-95 p-3.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed">
-                        {loading ? "Verifying..." : "Verify & Join Network"}
+                    {/* Submit Button */}
+                    <button 
+                        type="submit" 
+                        disabled={loading} 
+                        className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-purple-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                        {loading ? <Loader2 className="animate-spin" size={20} /> : "Verify & Join Network"}
                     </button>
                 </form>
 
-                <p className="mt-8 text-center text-sm text-gray-500">
-                    Already have an account? <span onClick={() => navigate('/login')} className="text-nxt-accent font-semibold cursor-pointer hover:text-white transition-colors">Login here</span>
-                </p>
+                {/* Footer */}
+                <div className="mt-8 text-center">
+                    <p className="text-gray-500 text-sm">
+                        Already have an account?{' '}
+                        <span onClick={() => navigate('/login')} className="text-purple-400 font-bold cursor-pointer hover:text-purple-300 hover:underline transition-all">
+                            Login here
+                        </span>
+                    </p>
+                </div>
             </div>
         </div>
     );

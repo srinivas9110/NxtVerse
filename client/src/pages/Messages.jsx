@@ -2,54 +2,81 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
 import axios from 'axios';
 import { 
-    MessageSquare, Send, Search, Video, MoreHorizontal, 
-    ArrowLeft, Users, Lock, Megaphone, Smile 
+    MessageSquare, Send, Search, MoreHorizontal, 
+    ArrowLeft, Users, Lock, Megaphone, Smile, Trash2
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function Messages() {
     const navigate = useNavigate();
     const location = useLocation();
-    const [contacts, setContacts] = useState([]);
-    const [selectedContact, setSelectedContact] = useState(null);
+    
+    // Data States
+    const [activeChats, setActiveChats] = useState([]); // People I've already messaged
+    const [allConnections, setAllConnections] = useState([]); // All my connections (for search)
     const [messages, setMessages] = useState([]);
-    const [newMessage, setNewMessage] = useState("");
     const [currentUser, setCurrentUser] = useState(null);
     
-    // State for the "Reaction Picker" popup
-    const [showReactionPicker, setShowReactionPicker] = useState(null); // Stores messageId
-    
+    // UI States
+    const [selectedContact, setSelectedContact] = useState(null);
+    const [newMessage, setNewMessage] = useState("");
+    const [searchTerm, setSearchTerm] = useState("");
+    const [showReactionPicker, setShowReactionPicker] = useState(null);
+    const [showMenu, setShowMenu] = useState(false); // Three-dots menu dropdown
+
     const scrollRef = useRef();
 
-    // 1. Init
+    // Helper: Fix Image URLs (Cloudinary vs Local)
+    const getImg = (path) => {
+        if (!path) return null;
+        return (path.startsWith('http') || path.startsWith('blob')) ? path : `${API_URL}${path}`;
+    };
+
+    // 1. INIT: Fetch User, Active Chats, AND Connections
     useEffect(() => {
         const init = async () => {
             const token = localStorage.getItem('token');
             if (!token) { navigate('/login'); return; }
 
             try {
+                // A. Get Me (to know my ID and Connections)
                 const userRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
                 setCurrentUser(userRes.data);
 
+                // B. Get Active Conversations (Sidebar)
                 const contactsRes = await axios.get(`${API_URL}/api/messages/conversations`, { headers: { "auth-token": token } });
-                let currentContacts = contactsRes.data.filter(c => c._id !== userRes.data._id || c.isGroup);
+                const validContacts = contactsRes.data.filter(c => c._id !== userRes.data._id || c.isGroup);
+                setActiveChats(validContacts);
 
+                // C. Get All Connections (For Search)
+                // We fetch all users and filter by my connection IDs.
+                // Ideally, you'd have a specific /connections endpoint, but this works with your current setup.
+                const allUsersRes = await axios.get(`${API_URL}/api/users/fetchall`, { headers: { "auth-token": token } });
+                const myConnIds = userRes.data.connections || [];
+                // Filter users who are in my connections list
+                const myConns = allUsersRes.data.filter(u => myConnIds.includes(u._id));
+                setAllConnections(myConns);
+
+                // D. Handle "Start Chat" from Profile Page
                 if (location.state?.startChat) {
                     const newPeer = location.state.startChat;
-                    const exists = currentContacts.find(c => c._id === newPeer._id);
-                    if (!exists) currentContacts = [newPeer, ...currentContacts];
-                    setContacts(currentContacts);
+                    // Check if already in active chats
+                    const exists = validContacts.find(c => c._id === newPeer._id);
+                    if (!exists) {
+                        // If not, temporarily add to active list so we can chat immediately
+                        setActiveChats(prev => [newPeer, ...prev]);
+                    }
                     setSelectedContact(newPeer);
+                    // Clear state so refresh doesn't reset
                     window.history.replaceState({}, document.title);
-                } else {
-                    setContacts(currentContacts);
                 }
+
             } catch (err) { console.error(err); }
         };
         init();
     }, [navigate, location.state]);
 
-    // 2. Fetch Messages
+    // 2. FETCH MESSAGES
     useEffect(() => {
         if (selectedContact) {
             const fetchMessages = async () => {
@@ -67,12 +94,13 @@ export default function Messages() {
         }
     }, [selectedContact]);
 
-    // 3. Auto Scroll
+    // 3. AUTO SCROLL
     useEffect(() => {
         scrollRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    // 4. Send Message
+    // --- ACTIONS ---
+
     const handleSend = async (e) => {
         e.preventDefault();
         if (!newMessage.trim()) return;
@@ -81,6 +109,7 @@ export default function Messages() {
             const token = localStorage.getItem('token');
             const payload = { text: newMessage };
 
+            // Optimistic UI Update
             const tempMsg = {
                 _id: Date.now(),
                 sender: currentUser._id,
@@ -88,16 +117,41 @@ export default function Messages() {
                 timestamp: new Date(),
                 reactions: []
             };
-            
             setMessages([...messages, tempMsg]);
             setNewMessage("");
 
             await axios.post(`${API_URL}/api/messages/send/${selectedContact._id}`, payload, {
                 headers: { "auth-token": token }
             });
+            
+            // If this was a new chat (from search), ensure it stays in the sidebar
+            if (!activeChats.find(c => c._id === selectedContact._id)) {
+                setActiveChats([selectedContact, ...activeChats]);
+            }
+
         } catch (err) { 
             console.error("Send failed", err); 
             alert(err.response?.data?.error || "Failed to send");
+        }
+    };
+
+    const handleDeleteChat = async () => {
+        if (!window.confirm("Are you sure you want to delete this conversation? This cannot be undone.")) return;
+        
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`${API_URL}/api/messages/delete/${selectedContact._id}`, {
+                headers: { "auth-token": token }
+            });
+            
+            // Remove from UI
+            setActiveChats(prev => prev.filter(c => c._id !== selectedContact._id));
+            setSelectedContact(null);
+            setShowMenu(false);
+            
+        } catch (err) {
+            console.error(err);
+            alert("Failed to delete chat");
         }
     };
 
@@ -128,10 +182,31 @@ export default function Messages() {
         } catch (err) { console.error("Reaction failed"); }
     };
 
+    // --- SEARCH LOGIC (WhatsApp Style) ---
+    // If search term exists, show matching Active Chats AND matching Connections
+    const getSidebarList = () => {
+        if (!searchTerm) return activeChats;
+
+        const lowerTerm = searchTerm.toLowerCase();
+        
+        // 1. Filter existing chats
+        const filteredActive = activeChats.filter(c => c.fullName.toLowerCase().includes(lowerTerm));
+        
+        // 2. Find connections NOT in active chats matching search
+        const activeIds = new Set(activeChats.map(c => c._id));
+        const filteredConnections = allConnections.filter(c => 
+            !activeIds.has(c._id) && 
+            c.fullName.toLowerCase().includes(lowerTerm)
+        );
+
+        return [...filteredActive, ...filteredConnections];
+    };
+
+    const sidebarList = getSidebarList();
+
     const isAdmin = selectedContact?.isGroup 
         ? selectedContact.groupAdmins?.includes(currentUser?._id)
         : true; 
-
     const canChat = !selectedContact?.isAnnouncement || isAdmin;
 
     const getGroupedReactions = (reactions) => {
@@ -143,22 +218,37 @@ export default function Messages() {
     };
 
     return (
-        <div className="flex h-full bg-[#050505] text-white overflow-hidden" onClick={() => setShowReactionPicker(null)}>
+        <div className="flex h-full bg-[#050505] text-white overflow-hidden" onClick={() => { setShowReactionPicker(null); setShowMenu(false); }}>
+            
             {/* SIDEBAR */}
             <div className={`w-full md:w-96 bg-[#09090b] border-r border-white/5 flex flex-col ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
                 <div className="p-4 border-b border-white/5 bg-[#09090b]">
                     <h2 className="text-xl font-bold flex items-center gap-2 mb-4"><MessageSquare className="text-purple-500" /> Messages</h2>
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-                        <input type="text" placeholder="Search..." className="w-full bg-[#18181b] border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm focus:border-purple-500 outline-none text-white" />
+                        <input 
+                            type="text" 
+                            placeholder="Search people..." 
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full bg-[#18181b] border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm focus:border-purple-500 outline-none text-white transition-all" 
+                        />
                     </div>
                 </div>
-                <div className="flex-1 overflow-y-auto">
-                    {contacts.map(contact => (
-                        <div key={contact._id} onClick={() => setSelectedContact(contact)} className={`flex items-center gap-3 p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${selectedContact?._id === contact._id ? 'bg-white/5' : ''}`}>
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    {sidebarList.length === 0 ? (
+                        <div className="p-4 text-center text-gray-500 text-xs">No contacts found</div>
+                    ) : sidebarList.map(contact => (
+                        <div key={contact._id} onClick={() => { setSelectedContact(contact); setSearchTerm(""); }} className={`flex items-center gap-3 p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${selectedContact?._id === contact._id ? 'bg-white/5' : ''}`}>
                             <div className={`w-12 h-12 rounded-full p-[2px] ${contact.isGroup ? 'bg-gradient-to-br from-yellow-500 to-orange-500' : 'bg-gradient-to-br from-blue-500 to-purple-600'}`}>
-                                <div className="w-full h-full rounded-full bg-[#09090b] flex items-center justify-center">
-                                    {contact.isGroup ? <Users size={20} className="text-gray-300" /> : <span className="font-bold text-lg">{contact.fullName.charAt(0)}</span>}
+                                <div className="w-full h-full rounded-full bg-[#09090b] flex items-center justify-center overflow-hidden">
+                                    {contact.isGroup ? (
+                                        <Users size={20} className="text-gray-300" />
+                                    ) : contact.profilePic ? (
+                                        <img src={getImg(contact.profilePic)} alt="dp" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="font-bold text-lg">{contact.fullName.charAt(0)}</span>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex-1 min-w-0">
@@ -180,15 +270,40 @@ export default function Messages() {
                     <div className="h-16 px-6 border-b border-white/5 bg-[#09090b]/90 backdrop-blur-md flex items-center justify-between z-20">
                         <div className="flex items-center gap-3">
                             <button onClick={() => setSelectedContact(null)} className="md:hidden text-gray-400 hover:text-white"><ArrowLeft /></button>
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-black ${selectedContact.isGroup ? 'bg-gradient-to-tr from-yellow-400 to-orange-500' : 'bg-gradient-to-tr from-green-400 to-blue-500'}`}>
-                                {selectedContact.isGroup ? <Users size={20} className="text-black" /> : selectedContact.fullName.charAt(0)}
+                            
+                            {/* Header Avatar */}
+                            <div className={`w-10 h-10 rounded-full p-[2px] ${selectedContact.isGroup ? 'bg-gradient-to-tr from-yellow-400 to-orange-500' : 'bg-gradient-to-tr from-green-400 to-blue-500'}`}>
+                                <div className="w-full h-full rounded-full bg-[#09090b] flex items-center justify-center overflow-hidden">
+                                    {selectedContact.isGroup ? (
+                                        <Users size={20} className="text-white" />
+                                    ) : selectedContact.profilePic ? (
+                                        <img src={getImg(selectedContact.profilePic)} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="font-bold text-white">{selectedContact.fullName.charAt(0)}</span>
+                                    )}
+                                </div>
                             </div>
+                            
                             <div>
                                 <h3 className="font-bold">{selectedContact.fullName}</h3>
                                 <p className="text-xs text-gray-400">{selectedContact.isGroup ? (selectedContact.isAnnouncement ? "Read Only Channel" : "Group Chat") : "Online"}</p>
                             </div>
                         </div>
-                        <MoreHorizontal className="text-gray-400 cursor-pointer hover:text-white" />
+
+                        {/* THREE DOTS MENU */}
+                        <div className="relative">
+                            <button onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }} className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white">
+                                <MoreHorizontal />
+                            </button>
+                            
+                            {showMenu && (
+                                <div className="absolute right-0 top-10 w-48 bg-[#18181b] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                                    <button onClick={handleDeleteChat} className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-400 hover:bg-white/5 transition-colors">
+                                        <Trash2 size={16} /> Delete Chat
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Chat Body */}
@@ -212,7 +327,7 @@ export default function Messages() {
                                             {msg.text}
                                             <p className="text-[9px] text-right opacity-60 mt-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
 
-                                            {/* 🟢 FIX: Only show reaction picker if it is NOT me */}
+                                            {/* Reaction Picker Button */}
                                             {!isMe && (
                                                 <button 
                                                     onClick={(e) => { e.stopPropagation(); setShowReactionPicker(showReactionPicker === msg._id ? null : msg._id); }}
@@ -223,7 +338,7 @@ export default function Messages() {
                                             )}
 
                                             {/* Reaction Picker Popover */}
-                                            {showReactionPicker === msg._id && (
+                                            {showReactionPicker === msg._id && !isMe && (
                                                 <div className="absolute -top-12 left-0 bg-[#18181b] border border-white/10 rounded-full px-2 py-1 flex gap-1 shadow-xl z-50 animate-in zoom-in-95">
                                                     {['👍', '❤️', '🔥', '😂', '😮'].map(emoji => (
                                                         <button 

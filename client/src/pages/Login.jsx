@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { API_URL } from '../config';
 import axios from 'axios';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { Hexagon, Loader2 } from 'lucide-react'; // Matches Signup iconography
 
 export default function Login() {
     const navigate = useNavigate();
@@ -23,7 +24,6 @@ export default function Login() {
             const res = await axios.post(`${API_URL}/api/auth/login`, formData);
 
             // 2. CRITICAL STEP: Save the Token!
-            // If this line is missing, the Dashboard will kick you out.
             localStorage.setItem('token', res.data.token);
 
             // 3. Go to Dashboard
@@ -38,54 +38,77 @@ export default function Login() {
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-[#050505] text-white relative overflow-hidden">
+        <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4 relative overflow-hidden font-sans selection:bg-purple-500/30">
 
-            {/* Background Glow */}
-            <div className="fixed top-1/2 left-1/2 w-96 h-96 bg-purple-600/20 blur-[120px] rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+            {/* Background Atmosphere (Matches Signup) */}
+            <div className="fixed inset-0 pointer-events-none">
+                <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-purple-900/20 rounded-full blur-[120px]" />
+                <div className="absolute bottom-[-20%] left-[-10%] w-[600px] h-[600px] bg-blue-900/20 rounded-full blur-[120px]" />
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20" />
+            </div>
 
-            <div className="w-full max-w-md bg-[#18181b] border border-white/5 p-8 rounded-2xl relative z-10 shadow-2xl">
+            <div className="w-full max-w-md bg-[#111111]/80 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl relative z-10">
 
+                {/* Header */}
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-                        Welcome Back
-                    </h1>
-                    <p className="text-gray-400 text-sm">Login to access your NxtVerse dashboard.</p>
+                    <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-purple-500/20">
+                        <Hexagon className="text-white fill-white/20" size={24} />
+                    </div>
+                    <h1 className="text-3xl font-bold tracking-tight">Welcome Back</h1>
+                    <p className="text-gray-500 text-sm mt-2">Re-establish your connection to NxtVerse.</p>
                 </div>
 
                 {/* Error Message */}
                 {error && (
-                    <div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
+                    <div className="mb-6 p-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-2 bg-red-500/10 border-red-500/20 text-red-400">
                         {error}
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-                    <div className="group">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    {/* Email Input */}
+                    <div>
                         <input
-                            type="email" name="email" placeholder="College Email" onChange={handleChange}
-                            className="w-full p-3.5 rounded-xl bg-black/20 border border-white/10 focus:border-purple-500 outline-none transition-all placeholder:text-gray-600 text-white" required
+                            type="email" 
+                            name="email" 
+                            placeholder="College Email" 
+                            onChange={handleChange}
+                            className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:border-purple-500 focus:bg-[#0f0f0f] outline-none transition-all" 
+                            required
                         />
                     </div>
 
-                    <div className="group">
+                    {/* Password Input */}
+                    <div>
                         <input
-                            type="password" name="password" placeholder="Password" onChange={handleChange}
-                            className="w-full p-3.5 rounded-xl bg-black/20 border border-white/10 focus:border-purple-500 outline-none placeholder:text-gray-600 text-white transition-all" required
+                            type="password" 
+                            name="password" 
+                            placeholder="Password" 
+                            onChange={handleChange}
+                            className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:border-purple-500 focus:bg-[#0f0f0f] outline-none transition-all" 
+                            required
                         />
                     </div>
 
+                    {/* Submit Button */}
                     <button
                         type="submit"
                         disabled={loading}
-                        className="mt-2 w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90 p-3.5 rounded-xl font-bold transition-all disabled:opacity-50"
+                        className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-purple-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                        {loading ? "Logging in..." : "Login"}
+                        {loading ? <Loader2 className="animate-spin" size={20} /> : "Login"}
                     </button>
                 </form>
 
-                <p className="mt-8 text-center text-sm text-gray-500">
-                    Don't have an account? <Link to="/" className="text-purple-400 hover:text-white transition-colors">Sign up</Link>
-                </p>
+                {/* Footer */}
+                <div className="mt-8 text-center">
+                    <p className="text-gray-500 text-sm">
+                        Don't have an account?{' '}
+                        <span onClick={() => navigate('/')} className="text-purple-400 font-bold cursor-pointer hover:text-purple-300 hover:underline transition-all">
+                            Sign up
+                        </span>
+                    </p>
+                </div>
             </div>
         </div>
     );
