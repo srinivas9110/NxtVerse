@@ -63,6 +63,12 @@ const ArisePage = () => {
         } catch (err) { console.error(err); setLoading(false); }
     };
 
+    // Helper to fix image paths
+    const getImg = (path) => {
+        if (!path) return null;
+        return (path.startsWith('http') || path.startsWith('blob')) ? path : `${API_URL}${path}`;
+    };
+
     const enterDungeon = (dungeon) => {
         // Architect Mode Bypass
         if (user.role === 'faculty') {
@@ -88,14 +94,6 @@ const ArisePage = () => {
     };
 
     const submitDungeon = async () => {
-        // Calculate final score here to be safe (React state might lag slightly in async)
-        // Note: For production, better to pass score directly or calc on server fully if possible, 
-        // but here we send the accumulated score.
-        // We need to use the CURRENT score + 1 if the last answer was correct, 
-        // but handleAnswer updates state async. 
-        // TRICK: Just wait for the state to settle or submit via a separate 'Finish' button.
-        // For smoothness, we'll assume the state 'score' is up to date after the timeout in handleAnswer.
-
         setShowResult(true);
 
         if (user.role === 'faculty') return; // Architects don't submit
@@ -103,9 +101,7 @@ const ArisePage = () => {
         try {
             const token = localStorage.getItem('token');
             const res = await axios.put(`${API_URL}/api/arise/clear/${activeDungeon._id}`, {
-                score: score, // Note: This might miss the very last point if state update is slow. 
-                // A safer way is to check the last answer inside handleAnswer before calling submit.
-                // For now, let's assume it catches up or the user clicks "Claim".
+                score: score, 
                 totalQuestions: activeDungeon.questions.length
             }, { headers: { "auth-token": token } });
 
@@ -142,11 +138,15 @@ const ArisePage = () => {
                     )}
 
                     <div className="flex items-center gap-6 pt-8 md:pt-0">
-                        {/* Avatar Frame */}
+                        {/* Avatar Frame (Updated with Profile Pic Logic) */}
                         <div className={`w-24 h-24 rounded-xl border-2 ${rankStyle.border} shadow-[0_0_30px_rgba(0,0,0,0.5)] relative overflow-hidden group bg-black`}>
-                            <div className="absolute inset-0 flex items-center justify-center text-3xl font-bold text-gray-700">
-                                {user.fullName.charAt(0)}
-                            </div>
+                            {user.profilePic ? (
+                                <img src={getImg(user.profilePic)} alt="Hunter Avatar" className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="absolute inset-0 flex items-center justify-center text-3xl font-bold text-gray-700">
+                                    {user.fullName.charAt(0)}
+                                </div>
+                            )}
                             {/* Shadow Badge Overlay */}
                             <div className={`absolute bottom-0 w-full ${shadowBadge.color} text-[8px] font-bold text-center py-0.5 tracking-widest flex items-center justify-center gap-1`}>
                                 {shadowBadge.icon} {shadowBadge.name}
