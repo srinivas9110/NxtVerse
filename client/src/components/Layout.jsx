@@ -57,7 +57,7 @@ export default function Layout() {
     useEffect(() => {
         const interval = setInterval(() => setPulseIndex(p => (p + 1) % pulseMessages.length), 4000);
         return () => clearInterval(interval);
-    }, [pulseMessages.length]); // Add dependency to handle array updates
+    }, [pulseMessages.length]); 
 
     // 🟢 DATA FETCHING & HEARTBEAT
     useEffect(() => {
@@ -86,9 +86,7 @@ export default function Layout() {
             fetchActiveCount();
 
             // Intervals
-            // Notifications every 10s (Acts as your Heartbeat for 'fetchUser' middleware!)
             const reqInterval = setInterval(fetchReqs, 10000);
-            // Update Active Count every 30s
             const countInterval = setInterval(fetchActiveCount, 30000);
 
             return () => {
@@ -180,31 +178,34 @@ export default function Layout() {
             <div className="flex-1 md:ml-64 flex flex-col min-h-screen">
 
                 {/* HEADER */}
-                <header className="h-16 bg-[#050505]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/5 flex items-center justify-between px-4 md:px-8">
-                    <button onClick={() => setMobileMenuOpen(true)} className="md:hidden text-gray-400"><Menu size={24} /></button>
+                <div className="h-16 bg-[#050505]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/5 flex items-center justify-between px-4 md:px-8">
+                    
+                    {/* LEFT SIDE: Mobile Menu + Pulse */}
+                    <div className="flex items-center gap-4">
+                        <button onClick={() => setMobileMenuOpen(true)} className="md:hidden text-gray-400"><Menu size={24} /></button>
 
-                    {/* 🟢 LIVE PULSE WIDGET */}
-                    <div className="hidden md:flex items-center gap-3 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full">
-                        {/* Violate Blue Dot (Purple-Blue Mix) */}
-                        <div className="w-2 h-2 bg-[#6b21a8] rounded-full animate-pulse shadow-[0_0_8px_#a855f7]" />
-
-                        <div className="overflow-hidden h-4 w-32 relative">
-                            <AnimatePresence mode="wait">
-                                <motion.span
-                                    key={pulseIndex}
-                                    initial={{ y: 10, opacity: 0 }}
-                                    animate={{ y: 0, opacity: 1 }}
-                                    exit={{ y: -10, opacity: 0 }}
-                                    className="absolute inset-0 flex items-center text-[10px] font-mono font-bold text-gray-300 tracking-widest"
-                                >
-                                    {pulseMessages[pulseIndex]}
-                                </motion.span>
-                            </AnimatePresence>
+                        {/* 🟢 LIVE PULSE WIDGET (Hidden on Mobile to prevent overlap) */}
+                        <div className="hidden md:flex items-center gap-3 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full">
+                            <div className="w-2 h-2 bg-[#6b21a8] rounded-full animate-pulse shadow-[0_0_8px_#a855f7]" />
+                            <div className="overflow-hidden h-4 w-32 relative">
+                                <AnimatePresence mode="wait">
+                                    <motion.span
+                                        key={pulseIndex}
+                                        initial={{ y: 10, opacity: 0 }}
+                                        animate={{ y: 0, opacity: 1 }}
+                                        exit={{ y: -10, opacity: 0 }}
+                                        className="absolute inset-0 flex items-center text-[10px] font-mono font-bold text-gray-300 tracking-widest"
+                                    >
+                                        {pulseMessages[pulseIndex]}
+                                    </motion.span>
+                                </AnimatePresence>
+                            </div>
                         </div>
                     </div>
 
+                    {/* RIGHT SIDE: Widgets + Profile */}
                     <div className="flex items-center gap-4 ml-auto">
-                        {/* ... (Rest of Header: Calendar, Notifications, Profile) matches your original code ... */}
+                        
                         {/* CALENDAR WIDGET */}
                         <div className="relative" ref={calendarRef}>
                             <button onClick={() => { setShowCalendar(!showCalendar); setShowNotifications(false); }} className={`p-2 rounded-full transition-all ${showCalendar ? 'text-purple-400 bg-purple-500/10' : 'text-gray-400 hover:text-white'}`}>
@@ -215,12 +216,10 @@ export default function Layout() {
                                     <div className="flex justify-between items-center mb-4">
                                         <h3 className="font-bold text-sm text-white">Calendar</h3>
                                     </div>
-                                    {/* Tabs */}
                                     <div className="flex p-1 bg-white/5 rounded-lg mb-4">
                                         <button onClick={() => setCalendarTab('academic')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${calendarTab === 'academic' ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/20' : 'text-gray-500 hover:text-white'}`}>Academic</button>
                                         <button onClick={() => setCalendarTab('non-academic')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${calendarTab === 'non-academic' ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/20' : 'text-gray-500 hover:text-white'}`}>Non-Academic</button>
                                     </div>
-                                    {/* Add Event Form (Faculty) */}
                                     {user.role === 'faculty' && (
                                         <div className="mb-4 space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
                                             <input placeholder={`New ${calendarTab === 'academic' ? 'Acad' : 'Non-Acad'} Event`} className="w-full bg-black/40 p-2 rounded text-xs text-white border border-white/10 outline-none focus:border-purple-500 transition-colors" value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} />
@@ -230,7 +229,6 @@ export default function Layout() {
                                             </div>
                                         </div>
                                     )}
-                                    {/* List */}
                                     <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2">
                                         {calendarEvents.filter(e => e.type === calendarTab).length === 0 ? <p className="text-xs text-gray-500 text-center py-6">No {calendarTab} events.</p> : calendarEvents.filter(e => e.type === calendarTab).map(e => (
                                             <div key={e._id} className="p-3 rounded-xl bg-white/5 flex justify-between group border border-transparent hover:border-white/10 transition-colors">
@@ -277,7 +275,7 @@ export default function Layout() {
                                 <p className="text-[10px] text-gray-500">{user.role === 'faculty' ? 'Faculty' : `Student • ${user.section}`}</p>
                             </div>
                             <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 p-[2px]">
-                                <div className="w-full h-full rounded-full bg-[#050505] flex items-center justify-center font-bold text-xs">
+                                <div className="w-full h-full rounded-full bg-[#050505] flex items-center justify-center font-bold text-xs overflow-hidden">
                                     {/* 🟢 CHECK: Show Image if exists, else show Initial */}
                                     {user.profilePic ? (
                                         <img src={getImg(user.profilePic)} alt="profile" className="w-full h-full object-cover" />
@@ -288,7 +286,7 @@ export default function Layout() {
                             </div>
                         </Link>
                     </div>
-                </header>
+                </div>
 
                 <main className="flex-1 overflow-x-hidden">
                     <Outlet />
