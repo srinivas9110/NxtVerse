@@ -136,6 +136,11 @@ export default function Layout() {
 
     const isActive = (path) => location.pathname === path;
 
+    const getImg = (path) => {
+        if (!path) return null;
+        return (path.startsWith('http') || path.startsWith('blob')) ? path : `${API_URL}${path}`;
+    };
+
     return (
         <div className="flex min-h-screen bg-[#050505] text-white font-sans selection:bg-purple-500/30 hide-scrollbar">
 
@@ -273,7 +278,12 @@ export default function Layout() {
                             </div>
                             <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 p-[2px]">
                                 <div className="w-full h-full rounded-full bg-[#050505] flex items-center justify-center font-bold text-xs">
-                                    <img src={getImg(user.profilePic)} className="w-full h-full object-cover" />
+                                    {/* 🟢 CHECK: Show Image if exists, else show Initial */}
+                                    {user.profilePic ? (
+                                        <img src={getImg(user.profilePic)} alt="profile" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="text-white">{user.name.charAt(0)}</span>
+                                    )}
                                 </div>
                             </div>
                         </Link>
