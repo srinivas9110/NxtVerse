@@ -273,7 +273,7 @@ export default function Layout() {
                             </div>
                             <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 p-[2px]">
                                 <div className="w-full h-full rounded-full bg-[#050505] flex items-center justify-center font-bold text-xs">
-                                    {user.name.charAt(0)}
+                                    <img src={getImg(user.profilePic)} className="w-full h-full object-cover" />
                                 </div>
                             </div>
                         </Link>
