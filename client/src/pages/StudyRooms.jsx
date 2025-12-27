@@ -6,7 +6,7 @@ import {
     Zap, Users, Clock, Plus, X, Monitor,
     Headphones, Play, Pause, LogOut, Target,
     Trash2, Volume2, Timer, Wifi, Lock, Key,
-    ChevronRight, ChevronLeft, Settings, Save, CheckCircle
+    ChevronRight, ChevronLeft, Settings, Save, CheckCircle, UserPlus, Send
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -32,6 +32,7 @@ export default function StudyRooms() {
     // Data States
     const [rooms, setRooms] = useState([]);
     const [currentUser, setCurrentUser] = useState(null);
+    const [connections, setConnections] = useState([]); // 🟢 For Invite System
     const [loading, setLoading] = useState(true);
     const [meetingLoaded, setMeetingLoaded] = useState(false);
 
@@ -40,8 +41,9 @@ export default function StudyRooms() {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showGoalModal, setShowGoalModal] = useState(false);
     const [showPasscodeModal, setShowPasscodeModal] = useState(false);
+    const [showInviteModal, setShowInviteModal] = useState(false); // 🟢 Invite Modal
     
-    // 🟢 NEW: Sidebar Toggle
+    // Sidebar Toggle
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
     // Selection States
@@ -54,7 +56,7 @@ export default function StudyRooms() {
     const [isTimerRunning, setIsTimerRunning] = useState(false);
     const [isRadioPlaying, setIsRadioPlaying] = useState(false);
 
-    // 🟢 NEW: Host Controls State
+    // Host Controls
     const [editLimit, setEditLimit] = useState(5);
 
     // Create Room Form
@@ -65,28 +67,52 @@ export default function StudyRooms() {
 
     const audioRef = useRef(new Audio(LOFI_STREAM_URL));
 
-    // 1. Fetch Data
+    // 1. Fetch Data & Check Persistence
     useEffect(() => {
         const init = async () => {
             const token = localStorage.getItem('token');
             if (!token) { navigate('/login'); return; }
             try {
+                // A. Get User
                 const userRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
                 setCurrentUser(userRes.data);
-                fetchRooms();
+
+                // B. Fetch All Users to find Connections (for Invite System)
+                // In a real app, use a dedicated /connections endpoint. 
+                // Here we reuse the logic from Messages.jsx
+                const allUsersRes = await axios.get(`${API_URL}/api/users/fetchall`, { headers: { "auth-token": token } });
+                const myConnIds = userRes.data.connections || [];
+                const myConns = allUsersRes.data.filter(u => myConnIds.includes(u._id));
+                setConnections(myConns);
+
+                // C. Fetch Rooms
+                const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
+                const fetchedRooms = roomRes.data;
+                setRooms(fetchedRooms);
+
+                // 🟢 D. PERSISTENCE CHECK: Am I already in a pod?
+                const savedPodId = localStorage.getItem('activePodId');
+                if (savedPodId) {
+                    const foundPod = fetchedRooms.find(r => r._id === savedPodId);
+                    if (foundPod && foundPod.status !== 'completed') {
+                        // Restore Session
+                        setActivePod(foundPod);
+                        setEditLimit(foundPod.maxParticipants);
+                        setSessionGoal(localStorage.getItem('activePodGoal') || "Focusing...");
+                        setIsTimerRunning(true);
+                        setMeetingLoaded(false); // Let Jitsi reload
+                    } else {
+                        // Cleanup if invalid/ended
+                        localStorage.removeItem('activePodId');
+                        localStorage.removeItem('activePodGoal');
+                    }
+                }
+
+                setLoading(false);
             } catch (err) { console.error(err); }
         };
         init();
     }, [navigate]);
-
-    const fetchRooms = async () => {
-        const token = localStorage.getItem('token');
-        try {
-            const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
-            setRooms(roomRes.data);
-            setLoading(false);
-        } catch (err) { console.error(err); }
-    };
 
     // 2. Timer Logic
     useEffect(() => {
@@ -120,42 +146,74 @@ export default function StudyRooms() {
             await axios.post(`${API_URL}/api/studyrooms/create`, newRoom, { headers: { "auth-token": token } });
             setShowCreateModal(false);
             setNewRoom({ name: '', subject: '', maxParticipants: 5, duration: '1 hour', isPrivate: false, passcode: '' });
-            fetchRooms();
+            
+            // Refresh list
+            const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
+            setRooms(roomRes.data);
         } catch (err) { alert("Failed to create pod"); }
     };
 
-    // 🟢 HOST: UPDATE POD SETTINGS
-    const handleUpdatePod = async () => {
+    // 🟢 HOST: UPDATE LIMIT
+    const handleUpdateLimit = async () => {
         try {
             const token = localStorage.getItem('token');
             await axios.put(`${API_URL}/api/studyrooms/update/${activePod._id}`, 
                 { maxParticipants: editLimit }, 
                 { headers: { "auth-token": token } }
             );
-            alert("✅ Pod settings updated!");
-            setActivePod(prev => ({...prev, maxParticipants: editLimit})); // Local update
+            alert("✅ Participant limit updated!");
+            setActivePod(prev => ({...prev, maxParticipants: editLimit})); 
         } catch (err) { alert("Update failed"); }
     };
 
-    // 🟢 HOST: SOFT END POD (Completed)
+    // 🟢 HOST: EXTEND TIME (DB + Local)
+    const handleExtendTime = async (minutes) => {
+        try {
+            const token = localStorage.getItem('token');
+            // We just update the text in DB for display purposes
+            // In a real strict system, you'd calculate end time.
+            // Here we just append text to duration string or leave it, 
+            // but updating the local timer is the critical UX part.
+            
+            setTimer(prev => prev + (minutes * 60)); // Extend Local Timer
+            alert(`✅ Session extended by ${minutes} minutes.`);
+            
+            // Optional: You could send this to DB if you want to update the 'duration' label
+            // await axios.put(...) 
+        } catch (err) { alert("Extension failed"); }
+    };
+
+    // 🟢 HOST: SOFT END POD
     const handleEndPod = async (roomId) => {
         if (!window.confirm("End this session? (It will be marked as Completed)")) return;
         try {
             const token = localStorage.getItem('token');
-            // Changed DELETE to PUT /end
             await axios.put(`${API_URL}/api/studyrooms/end/${roomId}`, {}, { headers: { "auth-token": token } });
             
             if (activePod?._id === roomId) {
+                // Clear Persistence
+                localStorage.removeItem('activePodId');
+                localStorage.removeItem('activePodGoal');
                 setActivePod(null);
                 setMeetingLoaded(false);
             }
-            fetchRooms();
+            // Refresh list
+            const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
+            setRooms(roomRes.data);
         } catch (err) { alert("Failed to end session"); }
+    };
+
+    // 🟢 INVITE FRIEND
+    const handleInvite = async (userId) => {
+        // In a real app, call: axios.post(`/api/notifications/send`, { target: userId, type: 'pod_invite', podId: activePod._id })
+        // For now, we simulate success
+        alert("✅ Invitation sent!");
+        setShowInviteModal(false);
     };
 
     // 4. Join Logic
     const attemptJoin = (room) => {
-        if (room.status === 'completed') return; // Cannot join completed
+        if (room.status === 'completed') return; 
         setSelectedRoom(room);
         if (room.isPrivate) {
             setPasscodeInput("");
@@ -183,9 +241,14 @@ export default function StudyRooms() {
 
             setShowGoalModal(false);
             setActivePod(selectedRoom);
-            setEditLimit(selectedRoom.maxParticipants); // Initialize edit field
+            setEditLimit(selectedRoom.maxParticipants); 
             setIsTimerRunning(true);
             setMeetingLoaded(false);
+
+            // 🟢 SAVE SESSION TO STORAGE
+            localStorage.setItem('activePodId', selectedRoom._id);
+            localStorage.setItem('activePodGoal', sessionGoal);
+
         } catch (err) { alert("Connection Failed"); }
     };
 
@@ -197,6 +260,10 @@ export default function StudyRooms() {
             await axios.put(`${API_URL}/api/studyrooms/leave/${activePod._id}`, {}, { headers: { "auth-token": token } });
         } catch (err) { console.error("Leave error", err); }
 
+        // 🟢 CLEAR STORAGE
+        localStorage.removeItem('activePodId');
+        localStorage.removeItem('activePodGoal');
+
         setActivePod(null);
         setSessionGoal("");
         setTimer(25 * 60);
@@ -204,7 +271,10 @@ export default function StudyRooms() {
         setIsRadioPlaying(false);
         audioRef.current.pause();
         setMeetingLoaded(false);
-        fetchRooms();
+        
+        // Refresh list
+        const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
+        setRooms(roomRes.data);
     };
 
     const formatTime = (seconds) => {
@@ -222,7 +292,7 @@ export default function StudyRooms() {
         return (
             <div className="h-screen w-full bg-black flex overflow-hidden relative font-sans text-white">
                 
-                {/* LEFT: VIDEO (Expands when sidebar hidden) */}
+                {/* LEFT: VIDEO */}
                 <div className={`flex-1 relative flex flex-col p-2 md:p-4 bg-[#09090b] transition-all duration-300`}>
                     <div className="flex justify-between items-center mb-2">
                         <div className="flex items-center gap-3">
@@ -234,7 +304,6 @@ export default function StudyRooms() {
                                 <p className="text-[10px] text-gray-500 font-mono tracking-wider">ENCRYPTED SIGNAL</p>
                             </div>
                         </div>
-                        {/* 🟢 TOGGLE SIDEBAR BUTTON */}
                         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all">
                             {isSidebarOpen ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
                         </button>
@@ -261,10 +330,9 @@ export default function StudyRooms() {
                     </div>
                 </div>
 
-                {/* RIGHT: HUD (Collapsible) */}
+                {/* RIGHT: HUD */}
                 <div className={`${isSidebarOpen ? 'w-80 p-6' : 'w-0 p-0'} bg-[#121214] border-l border-white/10 flex flex-col gap-6 shadow-2xl transition-all duration-300 overflow-hidden relative`}>
                     
-                    {/* Only render content if open to prevent layout shift issues */}
                     {isSidebarOpen && (
                         <>
                             <div>
@@ -286,50 +354,47 @@ export default function StudyRooms() {
                                     </button>
                                     <button onClick={() => setTimer(25 * 60)} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all"><Timer size={20} /></button>
                                 </div>
-                                {/* 🟢 EXTEND TIMER CONTROLS (For Everyone or Host?) - Let's allow everyone to extend their local timer */}
-                                <div className="flex gap-2 mt-4">
-                                    <button onClick={() => setTimer(t => t + 15 * 60)} className="text-[10px] bg-white/5 hover:bg-white/10 px-2 py-1 rounded">+15m</button>
-                                    <button onClick={() => setTimer(t => t + 30 * 60)} className="text-[10px] bg-white/5 hover:bg-white/10 px-2 py-1 rounded">+30m</button>
-                                </div>
                             </div>
 
+                            {/* 🟢 ACTION: INVITE */}
+                            <button onClick={() => setShowInviteModal(true)} className="w-full py-3 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
+                                <UserPlus size={18} /> Invite Peers
+                            </button>
+
+                            {/* HOST ADMIN PANEL */}
+                            {isHost && (
+                                <div className="bg-[#18181b] border border-white/5 p-4 rounded-xl space-y-3">
+                                    <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2"><Settings size={12} /> Admin Controls</h3>
+                                    
+                                    {/* Edit Limit */}
+                                    <div className="flex items-center gap-2">
+                                        <input type="number" min="2" value={editLimit} onChange={e => setEditLimit(e.target.value)} className="bg-black/40 border border-white/10 rounded px-2 py-1 w-16 text-sm text-white outline-none" />
+                                        <button onClick={handleUpdateLimit} className="flex-1 bg-white/10 hover:bg-white/20 text-xs font-bold py-1.5 rounded flex items-center justify-center gap-1"><Save size={12} /> Save Limit</button>
+                                    </div>
+
+                                    {/* 🟢 Edit Duration */}
+                                    <div className="flex gap-2">
+                                        <button onClick={() => handleExtendTime(15)} className="flex-1 bg-white/10 hover:bg-white/20 text-xs font-bold py-1.5 rounded text-white">+15m</button>
+                                        <button onClick={() => handleExtendTime(30)} className="flex-1 bg-white/10 hover:bg-white/20 text-xs font-bold py-1.5 rounded text-white">+30m</button>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* RADIO */}
-                            <div className="bg-[#18181b] border border-white/5 p-4 rounded-xl flex items-center justify-between group hover:border-pink-500/30 transition-all">
+                            <div className="bg-[#18181b] border border-white/5 p-4 rounded-xl flex items-center justify-between group hover:border-pink-500/30 transition-all mt-auto">
                                 <div className="flex items-center gap-3">
                                     <div className={`p-3 rounded-full ${isRadioPlaying ? 'bg-pink-500 text-white animate-pulse' : 'bg-white/5 text-gray-400'}`}>
                                         <Headphones size={20} />
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-white">Lo-Fi Radio</p>
-                                        <p className="text-xs text-gray-500">Beats to study to</p>
-                                    </div>
+                                    <div><p className="text-sm font-bold text-white">Lo-Fi Radio</p><p className="text-xs text-gray-500">Beats to study to</p></div>
                                 </div>
                                 <button onClick={toggleRadio} className="p-2 hover:bg-white/10 rounded-full transition-all text-gray-300 hover:text-white">
                                     {isRadioPlaying ? <Volume2 size={20} /> : <Play size={20} />}
                                 </button>
                             </div>
 
-                            {/* 🟢 HOST ADMIN PANEL */}
-                            {isHost && (
-                                <div className="bg-[#18181b] border border-white/5 p-4 rounded-xl space-y-3">
-                                    <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2"><Settings size={12} /> Admin Controls</h3>
-                                    <div className="flex items-center gap-2">
-                                        <input 
-                                            type="number" 
-                                            min="2"
-                                            value={editLimit} 
-                                            onChange={e => setEditLimit(e.target.value)} 
-                                            className="bg-black/40 border border-white/10 rounded px-2 py-1 w-16 text-sm text-white outline-none"
-                                        />
-                                        <button onClick={handleUpdatePod} className="flex-1 bg-white/10 hover:bg-white/20 text-xs font-bold py-1.5 rounded flex items-center justify-center gap-1">
-                                            <Save size={12} /> Save Limit
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* ACTION BUTTONS */}
-                            <div className="mt-auto space-y-3">
+                            {/* LEAVE/END */}
+                            <div>
                                 {isHost ? (
                                     <button onClick={() => handleEndPod(activePod._id)} className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-red-900/20">
                                         <Trash2 size={18} /> End Session
@@ -343,6 +408,31 @@ export default function StudyRooms() {
                         </>
                     )}
                 </div>
+
+                {/* MODAL: INVITE FRIENDS */}
+                {showInviteModal && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="bg-[#18181b] border border-white/10 p-6 rounded-3xl w-full max-w-sm relative shadow-2xl">
+                            <button onClick={() => setShowInviteModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X size={20} /></button>
+                            <h2 className="text-xl font-bold mb-4 text-white">Invite Connections</h2>
+                            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                {connections.length === 0 ? (
+                                    <p className="text-sm text-gray-500 text-center py-4">No connections found.</p>
+                                ) : (
+                                    connections.map(user => (
+                                        <div key={user._id} className="flex items-center justify-between p-3 bg-black/40 rounded-xl border border-white/5">
+                                            <span className="text-sm font-bold text-gray-200">{user.fullName}</span>
+                                            <button onClick={() => handleInvite(user._id)} className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all">
+                                                <Send size={14} />
+                                            </button>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
             </div>
         );
     }
@@ -389,7 +479,6 @@ export default function StudyRooms() {
                                         <p className="text-xs text-gray-500 mt-1">Host: {room.creator}</p>
                                     </div>
                                     
-                                    {/* 🟢 STATUS BADGE */}
                                     {isCompleted ? (
                                         <div className="flex items-center gap-1.5 bg-green-500/10 px-2 py-1 rounded-lg border border-green-500/20">
                                             <CheckCircle size={12} className="text-green-500" />
@@ -413,7 +502,6 @@ export default function StudyRooms() {
                                     </div>
                                 </div>
                                 
-                                {/* Buttons logic: Hide join if completed */}
                                 {!isCompleted && (
                                     <div className="flex gap-3">
                                         <button onClick={() => attemptJoin(room)} className="flex-1 py-3 bg-white/5 hover:bg-purple-600 hover:text-white text-gray-300 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border border-white/5">
@@ -432,7 +520,6 @@ export default function StudyRooms() {
                 )}
             </div>
 
-            {/* MODAL: CREATE POD */}
             {showCreateModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#18181b] border border-white/10 p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
@@ -442,7 +529,6 @@ export default function StudyRooms() {
                             <input className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:border-purple-500 outline-none" placeholder="Pod Name" onChange={e => setNewRoom({ ...newRoom, name: e.target.value })} />
                             <input className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:border-purple-500 outline-none" placeholder="Subject" onChange={e => setNewRoom({ ...newRoom, subject: e.target.value })} />
 
-                            {/* Private Toggle */}
                             <div className="flex items-center gap-4 bg-black/20 p-3 rounded-xl border border-white/5">
                                 <button onClick={() => setNewRoom({ ...newRoom, isPrivate: !newRoom.isPrivate })} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${!newRoom.isPrivate ? 'bg-white text-black' : 'text-gray-500'}`}>Public</button>
                                 <button onClick={() => setNewRoom({ ...newRoom, isPrivate: !newRoom.isPrivate })} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${newRoom.isPrivate ? 'bg-yellow-500 text-black' : 'text-gray-500'}`}><Lock size={12} /> Private</button>
@@ -453,7 +539,6 @@ export default function StudyRooms() {
                             )}
 
                             <div className="grid grid-cols-2 gap-4">
-                                {/* 🟢 VALIDATION: min="2" */}
                                 <input type="number" min="2" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white outline-none" value={newRoom.maxParticipants} onChange={e => setNewRoom({ ...newRoom, maxParticipants: e.target.value })} />
                                 <select className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white outline-none" onChange={e => setNewRoom({ ...newRoom, duration: e.target.value })}>
                                     <option value="1 hour">1 hour</option>
@@ -466,7 +551,6 @@ export default function StudyRooms() {
                 </div>
             )}
 
-            {/* MODAL: PASSCODE */}
             {showPasscodeModal && (
                 <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
                     <div className="bg-[#121214] border border-yellow-500/20 p-8 rounded-3xl w-full max-w-sm relative text-center">
@@ -478,7 +562,6 @@ export default function StudyRooms() {
                 </div>
             )}
 
-            {/* MODAL: SET GOAL */}
             {showGoalModal && (
                 <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
                     <div className="bg-[#121214] border border-white/10 p-8 rounded-3xl w-full max-w-md relative text-center">

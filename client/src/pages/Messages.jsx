@@ -77,8 +77,6 @@ export default function Messages() {
                         headers: { "auth-token": token }
                     });
                     
-                    // 🟢 SMART SCROLL: Only scroll if message count CHANGED (New message arrived)
-                    // Or if it's the very first load (messages length was 0)
                     setMessages(prev => {
                         if (prev.length !== res.data.length) {
                             setTimeout(() => {
@@ -116,7 +114,6 @@ export default function Messages() {
             setMessages(prev => [...prev, tempMsg]);
             setNewMessage("");
             
-            // Force scroll on manual send
             setTimeout(() => {
                 messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
             }, 100);
@@ -208,11 +205,17 @@ export default function Messages() {
     };
 
     return (
-        <div className="flex h-full bg-[#050505] text-white overflow-hidden" onClick={() => { setShowReactionPicker(null); setShowMenu(false); }}>
+        /* 🟢 FIX 1: Calculated Height 
+           - h-[calc(100vh-4rem)] forces the container to fit exactly in the view below the 4rem Navbar.
+           - overflow-hidden prevents the body from scrolling.
+        */
+        <div className="flex h-[calc(100vh-4rem)] bg-[#050505] text-white overflow-hidden" onClick={() => { setShowReactionPicker(null); setShowMenu(false); }}>
             
             {/* SIDEBAR */}
-            <div className={`w-full md:w-96 bg-[#09090b] border-r border-white/5 flex flex-col ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
-                <div className="p-4 border-b border-white/5 bg-[#09090b]">
+            {/* 🟢 FIX 2: Flex Column Layout for Sidebar to enable internal scrolling */}
+            <div className={`w-full md:w-96 bg-[#09090b] border-r border-white/5 flex flex-col h-full ${selectedContact ? 'hidden md:flex' : 'flex'}`}>
+                {/* Search Header (Fixed) */}
+                <div className="p-4 border-b border-white/5 bg-[#09090b] shrink-0">
                     <h2 className="text-xl font-bold flex items-center gap-2 mb-4"><MessageSquare className="text-purple-500" /> Messages</h2>
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
@@ -225,6 +228,8 @@ export default function Messages() {
                         />
                     </div>
                 </div>
+                
+                {/* Contact List (Scrollable) */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                     {sidebarList.length === 0 ? (
                         <div className="p-4 text-center text-gray-500 text-xs">No contacts found</div>
@@ -255,9 +260,12 @@ export default function Messages() {
 
             {/* CHAT AREA */}
             {selectedContact ? (
-                <div className="flex-1 flex flex-col relative h-full">
+                // 🟢 FIX 3: Chat Container Layout
+                // - h-full ensures it respects the parent's locked height
+                // - flex-col allows header/body/footer structure
+                <div className="flex-1 flex flex-col h-full relative min-w-0">
                     
-                    {/* 🟢 FIXED: Sticky Header */}
+                    {/* Chat Header (Sticky) */}
                     <div className="h-16 px-6 border-b border-white/5 bg-[#09090b]/90 backdrop-blur-md flex items-center justify-between z-20 shrink-0">
                         <div className="flex items-center gap-3">
                             <button onClick={() => setSelectedContact(null)} className="md:hidden text-gray-400 hover:text-white"><ArrowLeft /></button>
@@ -281,7 +289,8 @@ export default function Messages() {
                         </div>
                     </div>
 
-                    {/* Chat Body */}
+                    {/* Chat Body (Scrollable) */}
+                    {/* 🟢 FIX 4: flex-1 overflow-y-auto ensures ONLY this part scrolls */}
                     <div className="flex-1 overflow-y-auto p-4 md:p-8 flex flex-col gap-3 relative custom-scrollbar">
                         <div className="absolute inset-0 z-0 opacity-20 pointer-events-none bg-[url('https://i.pinimg.com/originals/b0/e0/00/b0e000506fae6320af46056c41ffa6ae.jpg')] bg-cover bg-center"></div>
 
@@ -316,11 +325,11 @@ export default function Messages() {
                                 </div>
                             );
                         })}
-                        {/* 🟢 FIXED: Empty div to scroll to */}
+                        {/* Auto-scroll target */}
                         <div ref={messagesEndRef} />
                     </div>
 
-                    {/* Input Area */}
+                    {/* Input Area (Fixed) */}
                     <div className="p-4 bg-[#09090b] border-t border-white/5 z-20 shrink-0">
                         {canChat ? (
                             <form onSubmit={handleSend} className="flex gap-2">
