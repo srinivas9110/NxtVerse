@@ -6,7 +6,7 @@ import {
     Zap, Users, Clock, Plus, X, Monitor,
     Headphones, Play, Pause, LogOut, Target,
     Trash2, Volume2, Timer, Wifi, Lock, Key,
-    ChevronRight, ChevronLeft, Settings, Save, CheckCircle, UserPlus, Send
+    ChevronRight, ChevronLeft, Settings, Save, CheckCircle, UserPlus, Send, RefreshCw
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -32,7 +32,7 @@ export default function StudyRooms() {
     // Data States
     const [rooms, setRooms] = useState([]);
     const [currentUser, setCurrentUser] = useState(null);
-    const [connections, setConnections] = useState([]); // 🟢 For Invite System
+    const [connections, setConnections] = useState([]); 
     const [loading, setLoading] = useState(true);
     const [meetingLoaded, setMeetingLoaded] = useState(false);
 
@@ -41,7 +41,7 @@ export default function StudyRooms() {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showGoalModal, setShowGoalModal] = useState(false);
     const [showPasscodeModal, setShowPasscodeModal] = useState(false);
-    const [showInviteModal, setShowInviteModal] = useState(false); // 🟢 Invite Modal
+    const [showInviteModal, setShowInviteModal] = useState(false);
     
     // Sidebar Toggle
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -67,7 +67,7 @@ export default function StudyRooms() {
 
     const audioRef = useRef(new Audio(LOFI_STREAM_URL));
 
-    // 1. Fetch Data & Check Persistence
+    // 1. Fetch Data
     useEffect(() => {
         const init = async () => {
             const token = localStorage.getItem('token');
@@ -77,42 +77,51 @@ export default function StudyRooms() {
                 const userRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
                 setCurrentUser(userRes.data);
 
-                // B. Fetch All Users to find Connections (for Invite System)
-                // In a real app, use a dedicated /connections endpoint. 
-                // Here we reuse the logic from Messages.jsx
-                const allUsersRes = await axios.get(`${API_URL}/api/users/fetchall`, { headers: { "auth-token": token } });
-                const myConnIds = userRes.data.connections || [];
-                const myConns = allUsersRes.data.filter(u => myConnIds.includes(u._id));
-                setConnections(myConns);
-
-                // C. Fetch Rooms
+                // B. Fetch Rooms
                 const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
                 const fetchedRooms = roomRes.data;
                 setRooms(fetchedRooms);
 
-                // 🟢 D. PERSISTENCE CHECK: Am I already in a pod?
+                // C. Persistence Check
                 const savedPodId = localStorage.getItem('activePodId');
                 if (savedPodId) {
                     const foundPod = fetchedRooms.find(r => r._id === savedPodId);
                     if (foundPod && foundPod.status !== 'completed') {
-                        // Restore Session
                         setActivePod(foundPod);
                         setEditLimit(foundPod.maxParticipants);
                         setSessionGoal(localStorage.getItem('activePodGoal') || "Focusing...");
                         setIsTimerRunning(true);
-                        setMeetingLoaded(false); // Let Jitsi reload
+                        setMeetingLoaded(false); 
                     } else {
-                        // Cleanup if invalid/ended
                         localStorage.removeItem('activePodId');
                         localStorage.removeItem('activePodGoal');
                     }
                 }
-
                 setLoading(false);
             } catch (err) { console.error(err); }
         };
         init();
     }, [navigate]);
+
+    // 🟢 NEW: Refresh Connections when Invite Modal Opens
+    useEffect(() => {
+        if (showInviteModal) {
+            const refreshConnections = async () => {
+                const token = localStorage.getItem('token');
+                try {
+                    // Fetch my latest data to get connection IDs
+                    const meRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
+                    const myConnIds = meRes.data.connections || [];
+                    
+                    // Fetch all users to map IDs to Names
+                    const allUsersRes = await axios.get(`${API_URL}/api/users/fetchall`, { headers: { "auth-token": token } });
+                    const myConns = allUsersRes.data.filter(u => myConnIds.includes(u._id));
+                    setConnections(myConns);
+                } catch (err) { console.error("Failed to refresh connections"); }
+            };
+            refreshConnections();
+        }
+    }, [showInviteModal]);
 
     // 2. Timer Logic
     useEffect(() => {
@@ -147,13 +156,11 @@ export default function StudyRooms() {
             setShowCreateModal(false);
             setNewRoom({ name: '', subject: '', maxParticipants: 5, duration: '1 hour', isPrivate: false, passcode: '' });
             
-            // Refresh list
             const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
             setRooms(roomRes.data);
         } catch (err) { alert("Failed to create pod"); }
     };
 
-    // 🟢 HOST: UPDATE LIMIT
     const handleUpdateLimit = async () => {
         try {
             const token = localStorage.getItem('token');
@@ -166,24 +173,11 @@ export default function StudyRooms() {
         } catch (err) { alert("Update failed"); }
     };
 
-    // 🟢 HOST: EXTEND TIME (DB + Local)
     const handleExtendTime = async (minutes) => {
-        try {
-            const token = localStorage.getItem('token');
-            // We just update the text in DB for display purposes
-            // In a real strict system, you'd calculate end time.
-            // Here we just append text to duration string or leave it, 
-            // but updating the local timer is the critical UX part.
-            
-            setTimer(prev => prev + (minutes * 60)); // Extend Local Timer
-            alert(`✅ Session extended by ${minutes} minutes.`);
-            
-            // Optional: You could send this to DB if you want to update the 'duration' label
-            // await axios.put(...) 
-        } catch (err) { alert("Extension failed"); }
+        setTimer(prev => prev + (minutes * 60)); 
+        alert(`✅ Session extended by ${minutes} minutes.`);
     };
 
-    // 🟢 HOST: SOFT END POD
     const handleEndPod = async (roomId) => {
         if (!window.confirm("End this session? (It will be marked as Completed)")) return;
         try {
@@ -191,24 +185,30 @@ export default function StudyRooms() {
             await axios.put(`${API_URL}/api/studyrooms/end/${roomId}`, {}, { headers: { "auth-token": token } });
             
             if (activePod?._id === roomId) {
-                // Clear Persistence
                 localStorage.removeItem('activePodId');
                 localStorage.removeItem('activePodGoal');
                 setActivePod(null);
                 setMeetingLoaded(false);
             }
-            // Refresh list
             const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
             setRooms(roomRes.data);
         } catch (err) { alert("Failed to end session"); }
     };
 
-    // 🟢 INVITE FRIEND
+    // 🟢 INVITE FRIEND (Backend Connected)
     const handleInvite = async (userId) => {
-        // In a real app, call: axios.post(`/api/notifications/send`, { target: userId, type: 'pod_invite', podId: activePod._id })
-        // For now, we simulate success
-        alert("✅ Invitation sent!");
-        setShowInviteModal(false);
+        const token = localStorage.getItem('token');
+        try {
+            await axios.post(`${API_URL}/api/studyrooms/invite`, 
+                { targetUserId: userId, podId: activePod._id }, 
+                { headers: { "auth-token": token } }
+            );
+            alert("✅ Invitation sent!");
+            // Optional: Close modal or keep open to invite more
+        } catch (err) {
+            console.error(err);
+            alert("Failed to send invite");
+        }
     };
 
     // 4. Join Logic
@@ -245,7 +245,6 @@ export default function StudyRooms() {
             setIsTimerRunning(true);
             setMeetingLoaded(false);
 
-            // 🟢 SAVE SESSION TO STORAGE
             localStorage.setItem('activePodId', selectedRoom._id);
             localStorage.setItem('activePodGoal', sessionGoal);
 
@@ -260,7 +259,6 @@ export default function StudyRooms() {
             await axios.put(`${API_URL}/api/studyrooms/leave/${activePod._id}`, {}, { headers: { "auth-token": token } });
         } catch (err) { console.error("Leave error", err); }
 
-        // 🟢 CLEAR STORAGE
         localStorage.removeItem('activePodId');
         localStorage.removeItem('activePodGoal');
 
@@ -272,7 +270,6 @@ export default function StudyRooms() {
         audioRef.current.pause();
         setMeetingLoaded(false);
         
-        // Refresh list
         const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
         setRooms(roomRes.data);
     };
@@ -356,10 +353,12 @@ export default function StudyRooms() {
                                 </div>
                             </div>
 
-                            {/* 🟢 ACTION: INVITE */}
-                            <button onClick={() => setShowInviteModal(true)} className="w-full py-3 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
-                                <UserPlus size={18} /> Invite Peers
-                            </button>
+                            {/* 🟢 ACTION: INVITE (RESTRICTED TO HOST) */}
+                            {isHost && (
+                                <button onClick={() => setShowInviteModal(true)} className="w-full py-3 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
+                                    <UserPlus size={18} /> Invite Peers
+                                </button>
+                            )}
 
                             {/* HOST ADMIN PANEL */}
                             {isHost && (
@@ -372,7 +371,7 @@ export default function StudyRooms() {
                                         <button onClick={handleUpdateLimit} className="flex-1 bg-white/10 hover:bg-white/20 text-xs font-bold py-1.5 rounded flex items-center justify-center gap-1"><Save size={12} /> Save Limit</button>
                                     </div>
 
-                                    {/* 🟢 Edit Duration */}
+                                    {/* Edit Duration */}
                                     <div className="flex gap-2">
                                         <button onClick={() => handleExtendTime(15)} className="flex-1 bg-white/10 hover:bg-white/20 text-xs font-bold py-1.5 rounded text-white">+15m</button>
                                         <button onClick={() => handleExtendTime(30)} className="flex-1 bg-white/10 hover:bg-white/20 text-xs font-bold py-1.5 rounded text-white">+30m</button>
@@ -414,7 +413,10 @@ export default function StudyRooms() {
                     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                         <div className="bg-[#18181b] border border-white/10 p-6 rounded-3xl w-full max-w-sm relative shadow-2xl">
                             <button onClick={() => setShowInviteModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X size={20} /></button>
-                            <h2 className="text-xl font-bold mb-4 text-white">Invite Connections</h2>
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-bold text-white">Invite Connections</h2>
+                                <RefreshCw size={16} className="text-gray-500 animate-spin-slow" />
+                            </div>
                             <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
                                 {connections.length === 0 ? (
                                     <p className="text-sm text-gray-500 text-center py-4">No connections found.</p>

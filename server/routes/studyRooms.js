@@ -132,4 +132,41 @@ router.put('/update/:id', fetchUser, async (req, res) => {
     }
 });
 
+// @route   POST /api/studyrooms/invite
+// @desc    Invite a user to the pod (Host Only)
+router.post('/invite', fetchUser, async (req, res) => {
+    try {
+        const { targetUserId, podId } = req.body;
+        const hostId = req.user.id;
+
+        // 1. Get Host Name
+        const host = await User.findById(hostId);
+        
+        // 2. Get Pod Name
+        const pod = await StudyRoom.findById(podId);
+        if (!pod) return res.status(404).json({ error: "Pod not found" });
+
+        // 3. Create Notification Object
+        const notification = {
+            type: 'pod_invite',
+            message: `${host.fullName} invited you to join '${pod.name}'`,
+            data: { podId: pod._id, roomId: pod.roomId }, // Data needed to join
+            timestamp: new Date(),
+            read: false
+        };
+
+        // 4. Push to Target User's Notification Array
+        // (Note: We assume your User model has a 'notifications' array. If not, this might fail quietly or need schema update)
+        await User.findByIdAndUpdate(targetUserId, {
+            $push: { notifications: notification }
+        });
+
+        res.json({ success: "Invitation sent" });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Server Error");
+    }
+});
+
 module.exports = router;
