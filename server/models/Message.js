@@ -11,11 +11,15 @@ const MessageSchema = new mongoose.Schema({
     timestamp: { type: Date, default: Date.now },
     read: { type: Boolean, default: false },
 
-    // 👇 NEW: Reactions Array
+    // Reactions Array
     reactions: [{
         user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         emoji: String
-    }]
+    }],
+
+    // 🟢 NEW: Soft Delete Logic
+    // If a user ID is in this array, they should NOT see this message.
+    hiddenFor: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
 });
 
 module.exports = mongoose.model('Message', MessageSchema);

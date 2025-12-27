@@ -5,7 +5,8 @@ import { JitsiMeeting } from '@jitsi/react-sdk';
 import {
     Zap, Users, Clock, Plus, X, Monitor,
     Headphones, Play, Pause, LogOut, Target,
-    Trash2, Volume2, Timer, Wifi, Lock, Key
+    Trash2, Volume2, Timer, Wifi, Lock, Key,
+    ChevronRight, ChevronLeft, Settings, Save, CheckCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -38,7 +39,10 @@ export default function StudyRooms() {
     const [activePod, setActivePod] = useState(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showGoalModal, setShowGoalModal] = useState(false);
-    const [showPasscodeModal, setShowPasscodeModal] = useState(false); // 🔒
+    const [showPasscodeModal, setShowPasscodeModal] = useState(false);
+    
+    // 🟢 NEW: Sidebar Toggle
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
     // Selection States
     const [selectedRoom, setSelectedRoom] = useState(null);
@@ -49,6 +53,9 @@ export default function StudyRooms() {
     const [timer, setTimer] = useState(25 * 60);
     const [isTimerRunning, setIsTimerRunning] = useState(false);
     const [isRadioPlaying, setIsRadioPlaying] = useState(false);
+
+    // 🟢 NEW: Host Controls State
+    const [editLimit, setEditLimit] = useState(5);
 
     // Create Room Form
     const [newRoom, setNewRoom] = useState({
@@ -106,6 +113,7 @@ export default function StudyRooms() {
     const handleCreateRoom = async () => {
         if (!newRoom.name || !newRoom.subject) return alert("Fill all fields");
         if (newRoom.isPrivate && newRoom.passcode.length < 4) return alert("Passcode must be 4 digits");
+        if (newRoom.maxParticipants < 2) return alert("Minimum 2 participants required");
 
         try {
             const token = localStorage.getItem('token');
@@ -116,23 +124,38 @@ export default function StudyRooms() {
         } catch (err) { alert("Failed to create pod"); }
     };
 
-    // 🛑 HOST: ENDS POD FOR EVERYONE
-    const handleEndPod = async (roomId) => {
-        if (!window.confirm("End this pod for everyone?")) return;
+    // 🟢 HOST: UPDATE POD SETTINGS
+    const handleUpdatePod = async () => {
         try {
             const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/api/studyrooms/delete/${roomId}`, { headers: { "auth-token": token } });
-            // If I am inside the pod I just deleted, force leave
+            await axios.put(`${API_URL}/api/studyrooms/update/${activePod._id}`, 
+                { maxParticipants: editLimit }, 
+                { headers: { "auth-token": token } }
+            );
+            alert("✅ Pod settings updated!");
+            setActivePod(prev => ({...prev, maxParticipants: editLimit})); // Local update
+        } catch (err) { alert("Update failed"); }
+    };
+
+    // 🟢 HOST: SOFT END POD (Completed)
+    const handleEndPod = async (roomId) => {
+        if (!window.confirm("End this session? (It will be marked as Completed)")) return;
+        try {
+            const token = localStorage.getItem('token');
+            // Changed DELETE to PUT /end
+            await axios.put(`${API_URL}/api/studyrooms/end/${roomId}`, {}, { headers: { "auth-token": token } });
+            
             if (activePod?._id === roomId) {
                 setActivePod(null);
                 setMeetingLoaded(false);
             }
             fetchRooms();
-        } catch (err) { alert("Failed to delete"); }
+        } catch (err) { alert("Failed to end session"); }
     };
 
     // 4. Join Logic
     const attemptJoin = (room) => {
+        if (room.status === 'completed') return; // Cannot join completed
         setSelectedRoom(room);
         if (room.isPrivate) {
             setPasscodeInput("");
@@ -156,17 +179,16 @@ export default function StudyRooms() {
 
         const token = localStorage.getItem('token');
         try {
-            // Tell backend I joined
             await axios.put(`${API_URL}/api/studyrooms/join/${selectedRoom._id}`, {}, { headers: { "auth-token": token } });
 
             setShowGoalModal(false);
             setActivePod(selectedRoom);
+            setEditLimit(selectedRoom.maxParticipants); // Initialize edit field
             setIsTimerRunning(true);
             setMeetingLoaded(false);
         } catch (err) { alert("Connection Failed"); }
     };
 
-    // 🚪 MEMBER: LEAVES POD (Updates Count)
     const leavePod = async () => {
         if (!window.confirm("Leaving already?")) return;
 
@@ -182,7 +204,7 @@ export default function StudyRooms() {
         setIsRadioPlaying(false);
         audioRef.current.pause();
         setMeetingLoaded(false);
-        fetchRooms(); // Update counts
+        fetchRooms();
     };
 
     const formatTime = (seconds) => {
@@ -198,19 +220,24 @@ export default function StudyRooms() {
         const isHost = currentUser._id === activePod.creatorId;
 
         return (
-            <div className="h-screen w-full bg-black flex flex-col md:flex-row overflow-hidden relative font-sans text-white">
-                {/* LEFT: VIDEO */}
-                <div className="flex-1 relative flex flex-col p-4 md:p-6 bg-[#09090b]">
-                    <div className="flex justify-between items-center mb-4">
+            <div className="h-screen w-full bg-black flex overflow-hidden relative font-sans text-white">
+                
+                {/* LEFT: VIDEO (Expands when sidebar hidden) */}
+                <div className={`flex-1 relative flex flex-col p-2 md:p-4 bg-[#09090b] transition-all duration-300`}>
+                    <div className="flex justify-between items-center mb-2">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-green-500/10 rounded-lg animate-pulse">
                                 <Wifi size={18} className="text-green-500" />
                             </div>
                             <div>
                                 <h2 className="font-bold text-lg leading-none">{activePod.name}</h2>
-                                <p className="text-[10px] text-gray-500 font-mono tracking-wider">SECURE CONNECTION ESTABLISHED</p>
+                                <p className="text-[10px] text-gray-500 font-mono tracking-wider">ENCRYPTED SIGNAL</p>
                             </div>
                         </div>
+                        {/* 🟢 TOGGLE SIDEBAR BUTTON */}
+                        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all">
+                            {isSidebarOpen ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+                        </button>
                     </div>
 
                     <div className="flex-1 relative rounded-3xl overflow-hidden border border-white/10 shadow-[0_0_40px_rgba(124,58,237,0.05)] bg-black group">
@@ -234,57 +261,87 @@ export default function StudyRooms() {
                     </div>
                 </div>
 
-                {/* RIGHT: HUD */}
-                <div className="w-full md:w-80 bg-[#121214] border-l border-white/10 p-6 flex flex-col gap-6 shadow-2xl z-10">
-                    <div>
-                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                            <Zap className="text-yellow-400" size={20} /> Focus HUD
-                        </h2>
-                        <p className="text-xs text-gray-500 mt-1">Goal: <span className="text-white italic">"{sessionGoal}"</span></p>
-                    </div>
-
-                    {/* TIMER */}
-                    <div className="bg-gradient-to-br from-purple-900/20 to-blue-900/20 border border-purple-500/20 p-6 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-white/10">
-                            <div className="h-full bg-purple-500 transition-all duration-1000" style={{ width: `${(timer / 1500) * 100}%` }}></div>
-                        </div>
-                        <span className="text-5xl font-mono font-bold text-white mb-2">{formatTime(timer)}</span>
-                        <div className="flex gap-3">
-                            <button onClick={() => setIsTimerRunning(!isTimerRunning)} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all">
-                                {isTimerRunning ? <Pause size={20} /> : <Play size={20} />}
-                            </button>
-                            <button onClick={() => setTimer(25 * 60)} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all"><Timer size={20} /></button>
-                        </div>
-                    </div>
-
-                    {/* RADIO */}
-                    <div className="bg-[#18181b] border border-white/5 p-4 rounded-xl flex items-center justify-between group hover:border-pink-500/30 transition-all">
-                        <div className="flex items-center gap-3">
-                            <div className={`p-3 rounded-full ${isRadioPlaying ? 'bg-pink-500 text-white animate-pulse' : 'bg-white/5 text-gray-400'}`}>
-                                <Headphones size={20} />
-                            </div>
+                {/* RIGHT: HUD (Collapsible) */}
+                <div className={`${isSidebarOpen ? 'w-80 p-6' : 'w-0 p-0'} bg-[#121214] border-l border-white/10 flex flex-col gap-6 shadow-2xl transition-all duration-300 overflow-hidden relative`}>
+                    
+                    {/* Only render content if open to prevent layout shift issues */}
+                    {isSidebarOpen && (
+                        <>
                             <div>
-                                <p className="text-sm font-bold text-white">Lo-Fi Radio</p>
-                                <p className="text-xs text-gray-500">Beats to study to</p>
+                                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <Zap className="text-yellow-400" size={20} /> Focus HUD
+                                </h2>
+                                <p className="text-xs text-gray-500 mt-1">Goal: <span className="text-white italic">"{sessionGoal}"</span></p>
                             </div>
-                        </div>
-                        <button onClick={toggleRadio} className="p-2 hover:bg-white/10 rounded-full transition-all text-gray-300 hover:text-white">
-                            {isRadioPlaying ? <Volume2 size={20} /> : <Play size={20} />}
-                        </button>
-                    </div>
 
-                    {/* ACTION BUTTONS */}
-                    <div className="mt-auto space-y-3">
-                        {isHost ? (
-                            <button onClick={() => handleEndPod(activePod._id)} className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-red-900/20">
-                                <Trash2 size={18} /> End Pod (Host)
-                            </button>
-                        ) : (
-                            <button onClick={leavePod} className="w-full py-3 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
-                                <LogOut size={18} /> Leave Pod
-                            </button>
-                        )}
-                    </div>
+                            {/* TIMER */}
+                            <div className="bg-gradient-to-br from-purple-900/20 to-blue-900/20 border border-purple-500/20 p-6 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-full h-1 bg-white/10">
+                                    <div className="h-full bg-purple-500 transition-all duration-1000" style={{ width: `${(timer / 1500) * 100}%` }}></div>
+                                </div>
+                                <span className="text-5xl font-mono font-bold text-white mb-2">{formatTime(timer)}</span>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setIsTimerRunning(!isTimerRunning)} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all">
+                                        {isTimerRunning ? <Pause size={20} /> : <Play size={20} />}
+                                    </button>
+                                    <button onClick={() => setTimer(25 * 60)} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all"><Timer size={20} /></button>
+                                </div>
+                                {/* 🟢 EXTEND TIMER CONTROLS (For Everyone or Host?) - Let's allow everyone to extend their local timer */}
+                                <div className="flex gap-2 mt-4">
+                                    <button onClick={() => setTimer(t => t + 15 * 60)} className="text-[10px] bg-white/5 hover:bg-white/10 px-2 py-1 rounded">+15m</button>
+                                    <button onClick={() => setTimer(t => t + 30 * 60)} className="text-[10px] bg-white/5 hover:bg-white/10 px-2 py-1 rounded">+30m</button>
+                                </div>
+                            </div>
+
+                            {/* RADIO */}
+                            <div className="bg-[#18181b] border border-white/5 p-4 rounded-xl flex items-center justify-between group hover:border-pink-500/30 transition-all">
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-3 rounded-full ${isRadioPlaying ? 'bg-pink-500 text-white animate-pulse' : 'bg-white/5 text-gray-400'}`}>
+                                        <Headphones size={20} />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-white">Lo-Fi Radio</p>
+                                        <p className="text-xs text-gray-500">Beats to study to</p>
+                                    </div>
+                                </div>
+                                <button onClick={toggleRadio} className="p-2 hover:bg-white/10 rounded-full transition-all text-gray-300 hover:text-white">
+                                    {isRadioPlaying ? <Volume2 size={20} /> : <Play size={20} />}
+                                </button>
+                            </div>
+
+                            {/* 🟢 HOST ADMIN PANEL */}
+                            {isHost && (
+                                <div className="bg-[#18181b] border border-white/5 p-4 rounded-xl space-y-3">
+                                    <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2"><Settings size={12} /> Admin Controls</h3>
+                                    <div className="flex items-center gap-2">
+                                        <input 
+                                            type="number" 
+                                            min="2"
+                                            value={editLimit} 
+                                            onChange={e => setEditLimit(e.target.value)} 
+                                            className="bg-black/40 border border-white/10 rounded px-2 py-1 w-16 text-sm text-white outline-none"
+                                        />
+                                        <button onClick={handleUpdatePod} className="flex-1 bg-white/10 hover:bg-white/20 text-xs font-bold py-1.5 rounded flex items-center justify-center gap-1">
+                                            <Save size={12} /> Save Limit
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ACTION BUTTONS */}
+                            <div className="mt-auto space-y-3">
+                                {isHost ? (
+                                    <button onClick={() => handleEndPod(activePod._id)} className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-red-900/20">
+                                        <Trash2 size={18} /> End Session
+                                    </button>
+                                ) : (
+                                    <button onClick={leavePod} className="w-full py-3 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
+                                        <LogOut size={18} /> Leave Pod
+                                    </button>
+                                )}
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         );
@@ -316,8 +373,10 @@ export default function StudyRooms() {
                 ) : (
                     rooms.map((room) => {
                         const isMyRoom = currentUser && room.creatorId === currentUser._id;
+                        const isCompleted = room.status === 'completed';
+
                         return (
-                            <div key={room._id} className="bg-[#121214] border border-white/5 p-6 rounded-3xl hover:border-purple-500/30 transition-all group relative overflow-hidden">
+                            <div key={room._id} className={`bg-[#121214] border border-white/5 p-6 rounded-3xl transition-all group relative overflow-hidden ${isCompleted ? 'opacity-70 grayscale' : 'hover:border-purple-500/30'}`}>
                                 <div className="flex justify-between items-start mb-6">
                                     <div>
                                         <div className="flex items-center gap-2 mb-2">
@@ -329,10 +388,19 @@ export default function StudyRooms() {
                                         <h3 className="text-xl font-bold text-white truncate w-48">{room.name}</h3>
                                         <p className="text-xs text-gray-500 mt-1">Host: {room.creator}</p>
                                     </div>
-                                    <div className="flex items-center gap-1.5 bg-black/40 px-2 py-1 rounded-lg border border-white/5">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                                        <span className="text-xs font-bold text-gray-300">Live</span>
-                                    </div>
+                                    
+                                    {/* 🟢 STATUS BADGE */}
+                                    {isCompleted ? (
+                                        <div className="flex items-center gap-1.5 bg-green-500/10 px-2 py-1 rounded-lg border border-green-500/20">
+                                            <CheckCircle size={12} className="text-green-500" />
+                                            <span className="text-xs font-bold text-green-500">Completed</span>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-1.5 bg-black/40 px-2 py-1 rounded-lg border border-white/5">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                                            <span className="text-xs font-bold text-gray-300">Live</span>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="space-y-3 mb-8">
                                     <div className="flex items-center gap-3 text-sm text-gray-400">
@@ -344,16 +412,20 @@ export default function StudyRooms() {
                                         <span>{room.duration} session</span>
                                     </div>
                                 </div>
-                                <div className="flex gap-3">
-                                    <button onClick={() => attemptJoin(room)} className="flex-1 py-3 bg-white/5 hover:bg-purple-600 hover:text-white text-gray-300 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border border-white/5">
-                                        {room.isPrivate ? <><Lock size={14} /> Unlock Pod</> : "Enter Pod"}
-                                    </button>
-                                    {isMyRoom && (
-                                        <button onClick={() => handleEndPod(room._id)} className="p-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl border border-red-500/10 transition-all" title="End Session">
-                                            <Trash2 size={18} />
+                                
+                                {/* Buttons logic: Hide join if completed */}
+                                {!isCompleted && (
+                                    <div className="flex gap-3">
+                                        <button onClick={() => attemptJoin(room)} className="flex-1 py-3 bg-white/5 hover:bg-purple-600 hover:text-white text-gray-300 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border border-white/5">
+                                            {room.isPrivate ? <><Lock size={14} /> Unlock Pod</> : "Enter Pod"}
                                         </button>
-                                    )}
-                                </div>
+                                        {isMyRoom && (
+                                            <button onClick={() => handleEndPod(room._id)} className="p-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl border border-red-500/10 transition-all" title="End Session">
+                                                <Trash2 size={18} />
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         );
                     })
@@ -381,7 +453,8 @@ export default function StudyRooms() {
                             )}
 
                             <div className="grid grid-cols-2 gap-4">
-                                <input type="number" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white outline-none" value={newRoom.maxParticipants} onChange={e => setNewRoom({ ...newRoom, maxParticipants: e.target.value })} />
+                                {/* 🟢 VALIDATION: min="2" */}
+                                <input type="number" min="2" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white outline-none" value={newRoom.maxParticipants} onChange={e => setNewRoom({ ...newRoom, maxParticipants: e.target.value })} />
                                 <select className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white outline-none" onChange={e => setNewRoom({ ...newRoom, duration: e.target.value })}>
                                     <option value="1 hour">1 hour</option>
                                     <option value="2 hours">2 hours</option>

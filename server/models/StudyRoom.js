@@ -7,17 +7,21 @@ const StudyRoomSchema = new mongoose.Schema({
 
     // 🔒 SECURITY
     isPrivate: { type: Boolean, default: false },
-    passcode: { type: String, default: null }, // Simple 4-digit code
+    passcode: { type: String, default: null }, 
 
     // 👥 PARTICIPANTS TRACKING
     maxParticipants: { type: Number, default: 5 },
-    activeUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Track distinct users
+    activeUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], 
 
     duration: { type: String, default: "1 hour" },
 
     // 👤 CREATOR INFO
     creator: { type: String, required: true },
     creatorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+
+    // 🟢 NEW: Status Tracking
+    status: { type: String, default: 'active', enum: ['active', 'completed'] },
+    endedAt: { type: Date },
 
     createdAt: { type: Date, default: Date.now }
 });

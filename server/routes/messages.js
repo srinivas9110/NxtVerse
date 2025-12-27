@@ -15,16 +15,15 @@ router.get('/conversations', fetchUser, async (req, res) => {
     try {
         const currentUserId = req.user.id;
 
-        // 🟢 FIX: Simplified Query to prevent "Vanishing Groups"
-        // Mongoose automatically checks if 'currentUserId' exists inside the 'users' array
         const groupChats = await Chat.find({ users: currentUserId })
             .populate('latestMessage')
             .sort({ updatedAt: -1 });
 
-        // 2. FETCH LEGACY DMs
+        // 🟢 FIX: Only fetch messages NOT hidden for me
         const messages = await Message.find({
             $or: [{ sender: currentUserId }, { receiver: currentUserId }],
-            chat: { $exists: false }
+            chat: { $exists: false },
+            hiddenFor: { $ne: currentUserId } // 👈 Exclude if hidden
         }).sort({ timestamp: -1 });
 
         const talkedUserIds = new Set();
@@ -39,7 +38,6 @@ router.get('/conversations', fetchUser, async (req, res) => {
         const dmUsers = await User.find({ _id: { $in: Array.from(talkedUserIds) } })
             .select('fullName email role profilePic');
 
-        // 3. MERGE
         const formattedGroups = groupChats.map(chat => ({
             _id: chat._id,
             fullName: chat.chatName, 
@@ -66,23 +64,26 @@ router.get('/:id', fetchUser, async (req, res) => {
 
         if (!isValidId(targetId)) return res.status(400).json({ error: "Invalid Chat ID" });
 
-        // Check if Group
         const isGroup = await Chat.findById(targetId);
-
-        let messages;
+        let query = {};
 
         if (isGroup) {
-            messages = await Message.find({ chat: targetId })
-                .populate('sender', 'fullName profilePic')
-                .sort({ timestamp: 1 });
+            query = { chat: targetId };
         } else {
-            messages = await Message.find({
+            query = {
                 $or: [
                     { sender: myId, receiver: targetId },
                     { sender: targetId, receiver: myId }
                 ]
-            }).sort({ timestamp: 1 });
+            };
         }
+
+        // 🟢 FIX: Exclude hidden messages
+        query.hiddenFor = { $ne: myId };
+
+        const messages = await Message.find(query)
+            .populate('sender', 'fullName profilePic')
+            .sort({ timestamp: 1 });
 
         res.json(messages);
     } catch (error) {
@@ -101,33 +102,32 @@ router.post('/send/:id', fetchUser, async (req, res) => {
 
         if (!isValidId(targetId)) return res.status(400).json({ error: "Invalid Target ID" });
 
+        // If DM, we must "unhide" previous messages for the receiver 
+        // so the chat reappears in their sidebar if they deleted it.
+        if (!await Chat.exists({ _id: targetId })) {
+             await Message.updateMany(
+                { 
+                    $or: [
+                        { sender: senderId, receiver: targetId },
+                        { sender: targetId, receiver: senderId }
+                    ]
+                },
+                { $pull: { hiddenFor: targetId } } // Remove receiver from hidden array
+            );
+        }
+
         const isGroup = await Chat.findById(targetId);
         let newMessage;
 
         if (isGroup) {
-            // ADMIN CHECK (Fixed for String vs ObjectId)
             if (isGroup.isAnnouncement) {
                 const isAdmin = isGroup.groupAdmins.some(adminId => adminId.toString() === senderId);
                 if (!isAdmin) return res.status(403).json({ error: "Only admins can send messages here." });
             }
-
-            newMessage = new Message({
-                sender: senderId,
-                chat: targetId,
-                text
-            });
-
-            await Chat.findByIdAndUpdate(targetId, { 
-                latestMessage: newMessage._id,
-                updatedAt: new Date() 
-            });
-
+            newMessage = new Message({ sender: senderId, chat: targetId, text });
+            await Chat.findByIdAndUpdate(targetId, { latestMessage: newMessage._id, updatedAt: new Date() });
         } else {
-            newMessage = new Message({
-                sender: senderId,
-                receiver: targetId,
-                text
-            });
+            newMessage = new Message({ sender: senderId, receiver: targetId, text });
         }
 
         const savedMessage = await newMessage.save();
@@ -145,46 +145,37 @@ router.put('/react/:id', fetchUser, async (req, res) => {
     try {
         const { emoji } = req.body;
         const message = await Message.findById(req.params.id);
-        
         if (!message) return res.status(404).send("Message not found");
 
-        // Check if user already reacted with THIS emoji
         const existingIndex = message.reactions.findIndex(
             r => r.user.toString() === req.user.id && r.emoji === emoji
         );
 
         if (existingIndex > -1) {
-            // Toggle OFF (Remove it)
             message.reactions.splice(existingIndex, 1);
         } else {
-            // Toggle ON (Add it)
             message.reactions.push({ user: req.user.id, emoji });
         }
 
         await message.save();
-        
-        // Return the updated reactions array so frontend can update instantly
         res.json(message.reactions);
-
     } catch (error) {
-        console.error("Reaction Error:", error);
         res.status(500).send("Server Error");
     }
 });
 
 // @route   DELETE /api/messages/delete/:id
-// @desc    Delete entire conversation (Group or DM)
+// @desc    Soft Delete Conversation
 router.delete('/delete/:id', fetchUser, async (req, res) => {
     try {
-        const targetId = req.params.id; // Can be GroupId OR UserId (for DMs)
+        const targetId = req.params.id; 
         const myId = req.user.id;
 
-        // Check if it's a Group
         const isGroup = await Chat.findById(targetId);
 
         if (isGroup) {
-            // A. Delete Group Chat (Only Admin should really do this, or just leave?)
-            // For now, let's say deleting a group chat deletes the group itself if admin
+            // Group: Only admin can fully delete. 
+            // Regular user leaving/clearing chat is complex, for now assume Admin Nuke.
             if (isGroup.groupAdmins.includes(myId)) {
                 await Message.deleteMany({ chat: targetId });
                 await Chat.findByIdAndDelete(targetId);
@@ -193,14 +184,16 @@ router.delete('/delete/:id', fetchUser, async (req, res) => {
                 return res.status(403).json({ error: "Only admins can delete the group" });
             }
         } else {
-            // B. Delete DM History
-            // We delete messages where (sender=Me, receiver=Target) OR (sender=Target, receiver=Me)
-            await Message.deleteMany({
-                $or: [
-                    { sender: myId, receiver: targetId },
-                    { sender: targetId, receiver: myId }
-                ]
-            });
+            // 🟢 DM: Soft Delete (Hide messages for ME only)
+            await Message.updateMany(
+                {
+                    $or: [
+                        { sender: myId, receiver: targetId },
+                        { sender: targetId, receiver: myId }
+                    ]
+                },
+                { $addToSet: { hiddenFor: myId } } // Add my ID to hidden list
+            );
             return res.json({ success: "Chat history cleared" });
         }
     } catch (err) {

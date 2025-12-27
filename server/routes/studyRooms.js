@@ -1,43 +1,54 @@
 const express = require('express');
 const router = express.Router();
 const StudyRoom = require('../models/StudyRoom');
-const User = require('../models/User'); // Need this to get real names
+const User = require('../models/User'); 
 const fetchUser = require('../middleware/fetchUser');
 
 // @route   GET /api/studyrooms/fetchall
-// @desc    Get all active rooms + Auto-Cleanup old ones
+// @desc    Get active rooms (public) + completed rooms (host only, today)
 router.get('/fetchall', fetchUser, async (req, res) => {
     try {
-        // 🧹 AUTO-CLEANUP: Delete rooms older than 24 hours
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        await StudyRoom.deleteMany({ createdAt: { $lt: twentyFourHoursAgo } });
+        const userId = req.user.id;
+        
+        // Calculate start of today (00:00:00)
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
 
-        const rooms = await StudyRoom.find().sort({ createdAt: -1 });
-        res.json(rooms);
+        // 1. Active Rooms (Visible to Everyone)
+        const activeRooms = await StudyRoom.find({ status: 'active' }).sort({ createdAt: -1 });
+
+        // 2. Completed Rooms (Visible ONLY to Creator, created Today)
+        const myCompletedRooms = await StudyRoom.find({
+            status: 'completed',
+            creatorId: userId,
+            createdAt: { $gte: startOfToday }
+        }).sort({ endedAt: -1 });
+
+        // 3. Auto-Cleanup: Delete older active rooms (e.g. > 24h) if needed
+        // (Optional: You can keep your old cleanup logic here if you want)
+
+        res.json([...activeRooms, ...myCompletedRooms]);
     } catch (error) {
+        console.error(error);
         res.status(500).send("Server Error");
     }
 });
 
 // @route   POST /api/studyrooms/create
-// @desc    Create a new pod (Secure Name Fetching)
+// @desc    Create a new pod
 router.post('/create', fetchUser, async (req, res) => {
     try {
         const { name, subject, maxParticipants, duration, isPrivate, passcode } = req.body;
-
-        // 1. Fetch Real User Name (Security)
         const user = await User.findById(req.user.id);
-        const realName = user.fullName;
-
-        // 2. Generate Unique Room ID
         const roomId = "NxtVerse-" + Math.random().toString(36).substring(7);
 
         const newRoom = new StudyRoom({
             name, subject, roomId, maxParticipants, duration,
-            creator: realName,
+            creator: user.fullName,
             creatorId: req.user.id,
             isPrivate: isPrivate || false,
-            passcode: isPrivate ? passcode : null
+            passcode: isPrivate ? passcode : null,
+            status: 'active'
         });
 
         const savedRoom = await newRoom.save();
@@ -53,8 +64,10 @@ router.put('/join/:id', fetchUser, async (req, res) => {
     try {
         const room = await StudyRoom.findById(req.params.id);
         if (!room) return res.status(404).send("Room not found");
+        
+        // Prevent joining if completed (unless logic requires otherwise, but generally no new joins)
+        if (room.status === 'completed') return res.status(400).send("Pod has ended");
 
-        // Add user if not already present
         if (!room.activeUsers.includes(req.user.id)) {
             room.activeUsers.push(req.user.id);
             await room.save();
@@ -70,27 +83,50 @@ router.put('/leave/:id', fetchUser, async (req, res) => {
         const room = await StudyRoom.findById(req.params.id);
         if (!room) return res.status(404).send("Room not found");
 
-        // Remove user
         room.activeUsers = room.activeUsers.filter(id => id.toString() !== req.user.id);
         await room.save();
         res.json(room);
     } catch (error) { res.status(500).send("Error"); }
 });
 
-// @route   DELETE /api/studyrooms/delete/:id
-// @desc    End Pod (Host Only)
-router.delete('/delete/:id', fetchUser, async (req, res) => {
+// @route   PUT /api/studyrooms/end/:id
+// @desc    Soft End Pod (Host Only) - Marks as completed
+router.put('/end/:id', fetchUser, async (req, res) => {
     try {
         const room = await StudyRoom.findById(req.params.id);
         if (!room) return res.status(404).send("Not Found");
 
-        // Strict Check: Only Creator can delete
         if (room.creatorId.toString() !== req.user.id) {
             return res.status(401).send("Not Allowed");
         }
 
-        await StudyRoom.findByIdAndDelete(req.params.id);
-        res.json({ success: "Pod Ended" });
+        room.status = 'completed';
+        room.endedAt = Date.now();
+        // We keep activeUsers for history or clear them depending on preference.
+        // Usually clearing them implies the room is empty in the UI list.
+        room.activeUsers = []; 
+        
+        await room.save();
+        res.json({ success: "Pod Ended", room });
+    } catch (error) {
+        res.status(500).send("Server Error");
+    }
+});
+
+// @route   PUT /api/studyrooms/update/:id
+// @desc    Update Pod settings (Limit/Duration) during meeting
+router.put('/update/:id', fetchUser, async (req, res) => {
+    try {
+        const { maxParticipants } = req.body;
+        const room = await StudyRoom.findById(req.params.id);
+        
+        if (!room) return res.status(404).send("Room not found");
+        if (room.creatorId.toString() !== req.user.id) return res.status(401).send("Unauthorized");
+
+        if (maxParticipants) room.maxParticipants = maxParticipants;
+        
+        await room.save();
+        res.json(room);
     } catch (error) {
         res.status(500).send("Server Error");
     }

@@ -12,8 +12,8 @@ export default function Messages() {
     const location = useLocation();
     
     // Data States
-    const [activeChats, setActiveChats] = useState([]); // People I've already messaged
-    const [allConnections, setAllConnections] = useState([]); // All my connections (for search)
+    const [activeChats, setActiveChats] = useState([]); 
+    const [allConnections, setAllConnections] = useState([]); 
     const [messages, setMessages] = useState([]);
     const [currentUser, setCurrentUser] = useState(null);
     
@@ -22,52 +22,43 @@ export default function Messages() {
     const [newMessage, setNewMessage] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
     const [showReactionPicker, setShowReactionPicker] = useState(null);
-    const [showMenu, setShowMenu] = useState(false); // Three-dots menu dropdown
+    const [showMenu, setShowMenu] = useState(false); 
 
     const scrollRef = useRef();
+    const messagesEndRef = useRef(null);
 
-    // Helper: Fix Image URLs (Cloudinary vs Local)
+    // Helper: Fix Image URLs
     const getImg = (path) => {
         if (!path) return null;
         return (path.startsWith('http') || path.startsWith('blob')) ? path : `${API_URL}${path}`;
     };
 
-    // 1. INIT: Fetch User, Active Chats, AND Connections
+    // 1. INIT
     useEffect(() => {
         const init = async () => {
             const token = localStorage.getItem('token');
             if (!token) { navigate('/login'); return; }
 
             try {
-                // A. Get Me (to know my ID and Connections)
                 const userRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
                 setCurrentUser(userRes.data);
 
-                // B. Get Active Conversations (Sidebar)
                 const contactsRes = await axios.get(`${API_URL}/api/messages/conversations`, { headers: { "auth-token": token } });
                 const validContacts = contactsRes.data.filter(c => c._id !== userRes.data._id || c.isGroup);
                 setActiveChats(validContacts);
 
-                // C. Get All Connections (For Search)
-                // We fetch all users and filter by my connection IDs.
-                // Ideally, you'd have a specific /connections endpoint, but this works with your current setup.
                 const allUsersRes = await axios.get(`${API_URL}/api/users/fetchall`, { headers: { "auth-token": token } });
                 const myConnIds = userRes.data.connections || [];
-                // Filter users who are in my connections list
                 const myConns = allUsersRes.data.filter(u => myConnIds.includes(u._id));
                 setAllConnections(myConns);
 
-                // D. Handle "Start Chat" from Profile Page
                 if (location.state?.startChat) {
                     const newPeer = location.state.startChat;
-                    // Check if already in active chats
                     const exists = validContacts.find(c => c._id === newPeer._id);
                     if (!exists) {
-                        // If not, temporarily add to active list so we can chat immediately
                         setActiveChats(prev => [newPeer, ...prev]);
                     }
                     setSelectedContact(newPeer);
-                    // Clear state so refresh doesn't reset
                     window.history.replaceState({}, document.title);
                 }
 
@@ -76,7 +67,7 @@ export default function Messages() {
         init();
     }, [navigate, location.state]);
 
-    // 2. FETCH MESSAGES
+    // 2. FETCH MESSAGES & SMART SCROLL
     useEffect(() => {
         if (selectedContact) {
             const fetchMessages = async () => {
@@ -85,7 +76,18 @@ export default function Messages() {
                     const res = await axios.get(`${API_URL}/api/messages/${selectedContact._id}`, {
                         headers: { "auth-token": token }
                     });
-                    setMessages(res.data);
+                    
+                    // 🟢 SMART SCROLL: Only scroll if message count CHANGED (New message arrived)
+                    // Or if it's the very first load (messages length was 0)
+                    setMessages(prev => {
+                        if (prev.length !== res.data.length) {
+                            setTimeout(() => {
+                                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                            }, 100);
+                        }
+                        return res.data;
+                    });
+
                 } catch (err) { console.error(err); }
             };
             fetchMessages();
@@ -93,11 +95,6 @@ export default function Messages() {
             return () => clearInterval(interval);
         }
     }, [selectedContact]);
-
-    // 3. AUTO SCROLL
-    useEffect(() => {
-        scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
 
     // --- ACTIONS ---
 
@@ -109,7 +106,6 @@ export default function Messages() {
             const token = localStorage.getItem('token');
             const payload = { text: newMessage };
 
-            // Optimistic UI Update
             const tempMsg = {
                 _id: Date.now(),
                 sender: currentUser._id,
@@ -117,14 +113,18 @@ export default function Messages() {
                 timestamp: new Date(),
                 reactions: []
             };
-            setMessages([...messages, tempMsg]);
+            setMessages(prev => [...prev, tempMsg]);
             setNewMessage("");
+            
+            // Force scroll on manual send
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, 100);
 
             await axios.post(`${API_URL}/api/messages/send/${selectedContact._id}`, payload, {
                 headers: { "auth-token": token }
             });
             
-            // If this was a new chat (from search), ensure it stays in the sidebar
             if (!activeChats.find(c => c._id === selectedContact._id)) {
                 setActiveChats([selectedContact, ...activeChats]);
             }
@@ -136,7 +136,7 @@ export default function Messages() {
     };
 
     const handleDeleteChat = async () => {
-        if (!window.confirm("Are you sure you want to delete this conversation? This cannot be undone.")) return;
+        if (!window.confirm("Delete this conversation? (Other person will still see it)")) return;
         
         try {
             const token = localStorage.getItem('token');
@@ -144,7 +144,6 @@ export default function Messages() {
                 headers: { "auth-token": token }
             });
             
-            // Remove from UI
             setActiveChats(prev => prev.filter(c => c._id !== selectedContact._id));
             setSelectedContact(null);
             setShowMenu(false);
@@ -155,7 +154,6 @@ export default function Messages() {
         }
     };
 
-    // 5. Handle Reaction Toggle
     const handleReaction = async (msgId, emoji) => {
         const updatedMessages = messages.map(msg => {
             if (msg._id === msgId) {
@@ -182,17 +180,12 @@ export default function Messages() {
         } catch (err) { console.error("Reaction failed"); }
     };
 
-    // --- SEARCH LOGIC (WhatsApp Style) ---
-    // If search term exists, show matching Active Chats AND matching Connections
     const getSidebarList = () => {
         if (!searchTerm) return activeChats;
-
         const lowerTerm = searchTerm.toLowerCase();
         
-        // 1. Filter existing chats
         const filteredActive = activeChats.filter(c => c.fullName.toLowerCase().includes(lowerTerm));
         
-        // 2. Find connections NOT in active chats matching search
         const activeIds = new Set(activeChats.map(c => c._id));
         const filteredConnections = allConnections.filter(c => 
             !activeIds.has(c._id) && 
@@ -203,10 +196,7 @@ export default function Messages() {
     };
 
     const sidebarList = getSidebarList();
-
-    const isAdmin = selectedContact?.isGroup 
-        ? selectedContact.groupAdmins?.includes(currentUser?._id)
-        : true; 
+    const isAdmin = selectedContact?.isGroup ? selectedContact.groupAdmins?.includes(currentUser?._id) : true; 
     const canChat = !selectedContact?.isAnnouncement || isAdmin;
 
     const getGroupedReactions = (reactions) => {
@@ -265,42 +255,27 @@ export default function Messages() {
 
             {/* CHAT AREA */}
             {selectedContact ? (
-                <div className="flex-1 flex flex-col relative">
-                    {/* Header */}
-                    <div className="h-16 px-6 border-b border-white/5 bg-[#09090b]/90 backdrop-blur-md flex items-center justify-between z-20">
+                <div className="flex-1 flex flex-col relative h-full">
+                    
+                    {/* 🟢 FIXED: Sticky Header */}
+                    <div className="h-16 px-6 border-b border-white/5 bg-[#09090b]/90 backdrop-blur-md flex items-center justify-between z-20 shrink-0">
                         <div className="flex items-center gap-3">
                             <button onClick={() => setSelectedContact(null)} className="md:hidden text-gray-400 hover:text-white"><ArrowLeft /></button>
-                            
-                            {/* Header Avatar */}
                             <div className={`w-10 h-10 rounded-full p-[2px] ${selectedContact.isGroup ? 'bg-gradient-to-tr from-yellow-400 to-orange-500' : 'bg-gradient-to-tr from-green-400 to-blue-500'}`}>
                                 <div className="w-full h-full rounded-full bg-[#09090b] flex items-center justify-center overflow-hidden">
-                                    {selectedContact.isGroup ? (
-                                        <Users size={20} className="text-white" />
-                                    ) : selectedContact.profilePic ? (
-                                        <img src={getImg(selectedContact.profilePic)} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <span className="font-bold text-white">{selectedContact.fullName.charAt(0)}</span>
-                                    )}
+                                    {selectedContact.isGroup ? <Users size={20} className="text-white" /> : selectedContact.profilePic ? <img src={getImg(selectedContact.profilePic)} className="w-full h-full object-cover" /> : <span className="font-bold text-white">{selectedContact.fullName.charAt(0)}</span>}
                                 </div>
                             </div>
-                            
                             <div>
                                 <h3 className="font-bold">{selectedContact.fullName}</h3>
                                 <p className="text-xs text-gray-400">{selectedContact.isGroup ? (selectedContact.isAnnouncement ? "Read Only Channel" : "Group Chat") : "Online"}</p>
                             </div>
                         </div>
-
-                        {/* THREE DOTS MENU */}
                         <div className="relative">
-                            <button onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }} className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white">
-                                <MoreHorizontal />
-                            </button>
-                            
+                            <button onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }} className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white"><MoreHorizontal /></button>
                             {showMenu && (
                                 <div className="absolute right-0 top-10 w-48 bg-[#18181b] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
-                                    <button onClick={handleDeleteChat} className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-400 hover:bg-white/5 transition-colors">
-                                        <Trash2 size={16} /> Delete Chat
-                                    </button>
+                                    <button onClick={handleDeleteChat} className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-400 hover:bg-white/5 transition-colors"><Trash2 size={16} /> Delete Chat</button>
                                 </div>
                             )}
                         </div>
@@ -319,52 +294,21 @@ export default function Messages() {
                             return (
                                 <div key={idx} className={`z-10 flex ${isMe ? 'justify-end' : 'justify-start'} group mb-4`}>
                                     <div className="flex flex-col max-w-[75%] relative">
-                                        {!isMe && selectedContact.isGroup && (
-                                            <span className="text-[10px] text-gray-400 ml-2 mb-1">{senderName}</span>
-                                        )}
-                                        
+                                        {!isMe && selectedContact.isGroup && <span className="text-[10px] text-gray-400 ml-2 mb-1">{senderName}</span>}
                                         <div className={`px-4 py-2 rounded-2xl shadow-md text-sm leading-relaxed relative ${isMe ? 'bg-purple-600 text-white rounded-tr-none' : 'bg-[#202c33] text-gray-200 rounded-tl-none'}`}>
                                             {msg.text}
                                             <p className="text-[9px] text-right opacity-60 mt-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-
-                                            {/* Reaction Picker Button */}
-                                            {!isMe && (
-                                                <button 
-                                                    onClick={(e) => { e.stopPropagation(); setShowReactionPicker(showReactionPicker === msg._id ? null : msg._id); }}
-                                                    className="absolute -top-3 -right-3 p-1 rounded-full bg-[#18181b] border border-white/10 text-gray-400 hover:text-yellow-400 hover:scale-110 transition-all opacity-0 group-hover:opacity-100 shadow-sm"
-                                                >
-                                                    <Smile size={14} />
-                                                </button>
-                                            )}
-
-                                            {/* Reaction Picker Popover */}
+                                            {!isMe && <button onClick={(e) => { e.stopPropagation(); setShowReactionPicker(showReactionPicker === msg._id ? null : msg._id); }} className="absolute -top-3 -right-3 p-1 rounded-full bg-[#18181b] border border-white/10 text-gray-400 hover:text-yellow-400 hover:scale-110 transition-all opacity-0 group-hover:opacity-100 shadow-sm"><Smile size={14} /></button>}
                                             {showReactionPicker === msg._id && !isMe && (
                                                 <div className="absolute -top-12 left-0 bg-[#18181b] border border-white/10 rounded-full px-2 py-1 flex gap-1 shadow-xl z-50 animate-in zoom-in-95">
-                                                    {['👍', '❤️', '🔥', '😂', '😮'].map(emoji => (
-                                                        <button 
-                                                            key={emoji} 
-                                                            onClick={() => handleReaction(msg._id, emoji)}
-                                                            className="hover:scale-125 transition-transform p-1 text-lg"
-                                                        >
-                                                            {emoji}
-                                                        </button>
-                                                    ))}
+                                                    {['👍', '❤️', '🔥', '😂', '😮'].map(emoji => <button key={emoji} onClick={() => handleReaction(msg._id, emoji)} className="hover:scale-125 transition-transform p-1 text-lg">{emoji}</button>)}
                                                 </div>
                                             )}
                                         </div>
-
-                                        {/* Display Reactions */}
                                         {Object.keys(reactions).length > 0 && (
                                             <div className={`flex gap-1 mt-1 flex-wrap ${isMe ? 'justify-end' : 'justify-start'}`}>
                                                 {Object.entries(reactions).map(([emoji, count]) => (
-                                                    <button 
-                                                        key={emoji}
-                                                        onClick={() => handleReaction(msg._id, emoji)}
-                                                        className="text-[10px] bg-[#18181b] border border-white/5 rounded-full px-2 py-0.5 text-gray-300 flex items-center gap-1 hover:bg-white/10 shadow-sm"
-                                                    >
-                                                        <span>{emoji}</span>
-                                                        <span className="font-bold">{count}</span>
-                                                    </button>
+                                                    <button key={emoji} onClick={() => handleReaction(msg._id, emoji)} className="text-[10px] bg-[#18181b] border border-white/5 rounded-full px-2 py-0.5 text-gray-300 flex items-center gap-1 hover:bg-white/10 shadow-sm"><span>{emoji}</span><span className="font-bold">{count}</span></button>
                                                 ))}
                                             </div>
                                         )}
@@ -372,11 +316,12 @@ export default function Messages() {
                                 </div>
                             );
                         })}
-                        <div ref={scrollRef}></div>
+                        {/* 🟢 FIXED: Empty div to scroll to */}
+                        <div ref={messagesEndRef} />
                     </div>
 
                     {/* Input Area */}
-                    <div className="p-4 bg-[#09090b] border-t border-white/5 z-20">
+                    <div className="p-4 bg-[#09090b] border-t border-white/5 z-20 shrink-0">
                         {canChat ? (
                             <form onSubmit={handleSend} className="flex gap-2">
                                 <input value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-1 bg-[#18181b] border border-white/10 rounded-full px-5 py-3 text-white focus:outline-none focus:border-purple-500 transition-all" />
