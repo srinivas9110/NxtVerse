@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     MapPin, Github, Code, Globe, Edit3, Save, Award,
     ExternalLink, Camera, MessageSquare, UserPlus,
-    Zap, Calendar, X, Lock, Hexagon, Box, Check, Clock
+    Crown, Calendar, X, Lock, Hexagon, Box, Check, Clock
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -69,7 +69,7 @@ const ArtifactVault = ({ formData }) => {
         {
             id: 'leader',
             label: 'Apex Leader',
-            icon: <Zap size={18} />,
+            icon: <Crown size={18} />,
             color: 'text-orange-400',
             glow: 'shadow-orange-500/20',
             border: 'border-orange-500/30',
