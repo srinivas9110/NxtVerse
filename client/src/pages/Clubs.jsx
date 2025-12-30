@@ -3,8 +3,8 @@ import { API_URL } from '../config';
 import axios from 'axios';
 import {
     Search, Users, ChevronRight, Settings,
-    Shield, UserPlus, Play, X, UserMinus, Crown,
-    Trash2, PlusCircle, Image as ImageIcon, CheckCircle, Edit2
+    Shield, X, UserMinus, Crown,
+    Trash2, PlusCircle, Image as ImageIcon, CheckCircle, Edit2, Play
 } from 'lucide-react';
 import YouTube from 'react-youtube';
 import { useNavigate, Link } from 'react-router-dom';
@@ -17,6 +17,13 @@ const getYoutubeId = (url) => {
     return (match && match[2].length === 11) ? match[2] : null;
 };
 
+// 🟢 NEW: Helper for Image URLs (Cloudinary vs Local)
+const getImageUrl = (path) => {
+    if (!path) return null;
+    if (path.startsWith('http')) return path; // Cloudinary URL
+    return `${API_URL}${path}`; // Local path
+};
+
 export default function Clubs() {
     const navigate = useNavigate();
 
@@ -24,27 +31,23 @@ export default function Clubs() {
     const [clubs, setClubs] = useState([]);
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [allUsers, setAllUsers] = useState([]); // 🟢 Added for Search
+    const [allUsers, setAllUsers] = useState([]);
 
     // UI State
     const [hoveredClub, setHoveredClub] = useState(null);
-    const [manageMode, setManageMode] = useState(null);
+    const [manageMode, setManageMode] = useState(null); // Stores clubId for Admin Overlay
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const [showPresidentModal, setShowPresidentModal] = useState(false); // 🟢 Added
+    const [showPresidentModal, setShowPresidentModal] = useState(false);
     const hoverTimeout = useRef(null);
 
     // Search States (For President Assignment)
     const [searchTerm, setSearchTerm] = useState("");
     const [searchResults, setSearchResults] = useState([]);
     const [selectedSearchUser, setSelectedSearchUser] = useState(null);
-    const [selectedClub, setSelectedClub] = useState(null);
+    const [selectedClub, setSelectedClub] = useState(null); // Stores clubId for President Assignment
 
     // New Club Form State
     const [newClub, setNewClub] = useState({ name: '', description: '', logo: '', videoUrl: '' });
-
-    // Management State (For Admin Overlay)
-    const [studentSearchTerm, setStudentSearchTerm] = useState('');
-    const [studentResults, setStudentResults] = useState([]);
 
     // 1. INIT
     useEffect(() => {
@@ -59,7 +62,7 @@ export default function Clubs() {
                 const clubsRes = await axios.get(`${API_URL}/api/clubs/fetchall`, { headers: { "auth-token": token } });
                 setClubs(clubsRes.data);
 
-                // 🟢 FETCH ALL USERS (If Faculty) - For Search Bar
+                // FETCH ALL USERS (If Faculty) - For Search Bar
                 if (userRes.data.role === 'faculty') {
                     const allRes = await axios.get(`${API_URL}/api/users/fetchall`, { headers: { "auth-token": token } });
                     setAllUsers(allRes.data);
@@ -71,7 +74,7 @@ export default function Clubs() {
         init();
     }, [navigate]);
 
-    // 🟢 2. SEARCH LOGIC (For President Modal)
+    // 2. SEARCH LOGIC (For President Modal)
     useEffect(() => {
         if (searchTerm.trim() === "") {
             setSearchResults([]);
@@ -83,27 +86,6 @@ export default function Clubs() {
         );
         setSearchResults(filtered.slice(0, 5));
     }, [searchTerm, allUsers]);
-
-    // --- EXISTING SEARCH (For Admin Overlay) ---
-    useEffect(() => {
-        if (manageMode && studentSearchTerm.length > 2) {
-            const searchStudents = async () => {
-                const token = localStorage.getItem('token');
-                try {
-                    const res = await axios.get(`${API_URL}/api/users/fetchall`, { headers: { "auth-token": token } });
-                    const results = res.data.filter(u =>
-                        u.fullName.toLowerCase().includes(studentSearchTerm.toLowerCase()) ||
-                        u.email.toLowerCase().includes(studentSearchTerm.toLowerCase())
-                    );
-                    setStudentResults(results.slice(0, 5));
-                } catch (err) { console.error(err); }
-            };
-            const delayDebounceFn = setTimeout(() => searchStudents(), 300);
-            return () => clearTimeout(delayDebounceFn);
-        } else {
-            setStudentResults([]);
-        }
-    }, [studentSearchTerm, manageMode]);
 
     // --- ACTIONS ---
 
@@ -130,7 +112,7 @@ export default function Clubs() {
         } catch (err) { alert("Error deleting club"); }
     };
 
-    // 🟢 ASSIGN PRESIDENT
+    // ASSIGN PRESIDENT
     const handleAssignPresident = async () => {
         if (!selectedSearchUser) return alert("Please select a student first!");
         
@@ -138,7 +120,7 @@ export default function Clubs() {
             const token = localStorage.getItem('token');
             // Sending studentId (User ID) instead of email
             const res = await axios.post(`${API_URL}/api/clubs/assign-president`, { 
-                clubId: selectedClub._id, 
+                clubId: selectedClub, // Use selectedClub directly (it's an ID now)
                 studentId: selectedSearchUser._id 
             }, { headers: { "auth-token": token } });
             
@@ -264,8 +246,9 @@ export default function Clubs() {
                                     {club.president ? (
                                         <div className="group/pres relative cursor-pointer" title={`President: ${club.president.fullName}`}>
                                             <div className="w-24 h-24 rounded-full border-4 border-[#121214] bg-[#18181b] overflow-hidden shadow-xl">
+                                                {/* 🟢 FIX: Use getImageUrl helper */}
                                                 {club.president.profilePic ? (
-                                                    <img src={`${API_URL}${club.president.profilePic}`} alt="Pres" className="w-full h-full object-cover" />
+                                                    <img src={getImageUrl(club.president.profilePic)} alt="Pres" className="w-full h-full object-cover" />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600 to-blue-600 text-2xl font-bold text-white">
                                                         {club.president.fullName?.charAt(0)}
@@ -286,26 +269,12 @@ export default function Clubs() {
                                     <p className="text-sm text-gray-400 font-medium line-clamp-2 leading-relaxed">{club.description || "Building the future."}</p>
                                 </div>
 
-                                {/* 🟢 ASSIGN BUTTON (Faculty Only) */}
-                                {user?.role === 'faculty' && (
-                                    <div className="flex gap-2 mb-2">
-                                        <button onClick={() => { setSelectedClub(club); setShowPresidentModal(true); }} className="text-xs text-blue-400 hover:text-white flex items-center gap-1">
-                                            <Edit2 size={12} /> {club.president ? 'Change President' : 'Assign President'}
-                                        </button>
-                                        {club.president && (
-                                            <button onClick={() => handleRemovePresident(club._id)} className="text-xs text-red-400 hover:text-white flex items-center gap-1">
-                                                <X size={12} /> Remove
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-
                                 <Link to={`/clubs/${club._id}`} className="w-full mt-2 py-3.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all group-hover:border-purple-500/30 group-hover:text-white text-gray-300">
                                     Visit HQ <ChevronRight size={16} />
                                 </Link>
                             </div>
 
-                            {/* 3. ADMIN OVERLAY (Existing) */}
+                            {/* 3. ADMIN OVERLAY (Now contains President controls) */}
                             {manageMode === club._id && (
                                 <div className="absolute inset-0 bg-[#09090b]/95 backdrop-blur-md z-50 p-6 flex flex-col animate-in slide-in-from-bottom duration-300">
                                     <div className="flex justify-between items-center mb-6">
@@ -313,8 +282,40 @@ export default function Clubs() {
                                         <button onClick={() => setManageMode(null)} className="p-2 hover:bg-white/10 rounded-full"><X size={18} /></button>
                                     </div>
                                     <div className="space-y-4 flex-1 overflow-y-auto">
+                                        
+                                        {/* 🟢 NEW: LEADERSHIP SECTION */}
                                         <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                                            <p className="text-[10px] text-gray-500 uppercase font-bold mb-3 tracking-wider">Visuals</p>
+                                            <p className="text-[10px] text-gray-500 uppercase font-bold mb-3 tracking-wider flex items-center gap-2"><Crown size={12} /> Leadership</p>
+                                            
+                                            {club.president ? (
+                                                <div className="flex items-center justify-between bg-black/40 p-3 rounded-lg border border-white/5 mb-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center font-bold text-xs">
+                                                            {club.president.fullName.charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-bold text-white">{club.president.fullName}</p>
+                                                            <p className="text-xs text-gray-500">Current President</p>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => handleRemovePresident(club._id)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full" title="Remove">
+                                                        <UserMinus size={16} />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-gray-500 mb-3">No president assigned.</p>
+                                            )}
+
+                                            <button 
+                                                onClick={() => { setSelectedClub(club._id); setShowPresidentModal(true); }} 
+                                                className="w-full py-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-600/50 rounded-lg text-sm text-purple-300 hover:text-white flex items-center justify-center gap-2 transition-all"
+                                            >
+                                                <Edit2 size={14} /> {club.president ? 'Change President' : 'Assign President'}
+                                            </button>
+                                        </div>
+
+                                        <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                                            <p className="text-[10px] text-gray-500 uppercase font-bold mb-3 tracking-wider flex items-center gap-2"><ImageIcon size={12} /> Visuals</p>
                                             <button onClick={() => handleUpdateVideo(club._id)} className="w-full py-2 bg-black/40 hover:bg-black/60 border border-white/10 rounded-lg text-sm text-blue-400 hover:text-blue-300 flex items-center justify-center gap-2 transition-all">
                                                 <Play size={14} /> Update Banner Video
                                             </button>
@@ -359,15 +360,14 @@ export default function Clubs() {
                 </div>
             )}
 
-            {/* 🟢 PRESIDENT ASSIGNMENT MODAL (Fixed Search Logic) */}
+            {/* PRESIDENT ASSIGNMENT MODAL */}
             {showPresidentModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#18181b] border border-white/10 p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
                         <button onClick={() => { setShowPresidentModal(false); setSearchTerm(""); setSelectedSearchUser(null); }} className="absolute top-6 right-6 text-gray-500 hover:text-white"><X /></button>
                         <h2 className="text-xl font-bold mb-1">Assign President</h2>
-                        <p className="text-xs text-gray-500 mb-6 uppercase tracking-wider font-bold">For {selectedClub?.name}</p>
                         
-                        <div className="relative mb-6">
+                        <div className="relative mb-6 mt-4">
                             <Search className="absolute left-3 top-3 text-gray-500" size={16} />
                             <input 
                                 className="w-full bg-black/40 border border-white/10 p-3 pl-10 rounded-xl text-white outline-none focus:border-purple-500 transition-all" 

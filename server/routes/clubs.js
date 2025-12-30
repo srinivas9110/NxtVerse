@@ -140,32 +140,45 @@ router.put('/update/:id', fetchUser, async (req, res) => {
     } catch (err) { res.status(500).send("Update Failed"); }
 });
 
-// 🟢 FIX: ASSIGN PRESIDENT (Uses ID now)
+// 🟢 UPDATE: ASSIGN PRESIDENT (Handles Badge Logic)
 router.post('/assign-president', fetchUser, async (req, res) => {
     try {
         if (req.user.role !== 'faculty') return res.status(403).json({ message: "Faculty Only" });
         
-        // Expecting studentId from frontend search result
         const { clubId, studentId } = req.body; 
         
-        const student = await User.findById(studentId);
-        if (!student) return res.status(404).json({ message: "Student not found" });
-
         const club = await Club.findById(clubId);
         if (!club) return res.status(404).json({ message: "Club not found" });
 
-        // Update Logic
-        club.president = student._id;
+        // 1. Find the new president
+        const newPresident = await User.findById(studentId);
+        if (!newPresident) return res.status(404).json({ message: "Student not found" });
+
+        // 2. Handle the OLD president (if any)
+        if (club.president) {
+            const oldPresident = await User.findById(club.president);
+            if (oldPresident) {
+                oldPresident.isPresident = false;
+                await oldPresident.save(); // 🟢 Remove badge eligibility
+            }
+        }
+
+        // 3. Assign the NEW president
+        club.president = newPresident._id;
         await club.save();
+
+        // 4. Update new president's status
+        newPresident.isPresident = true;
+        await newPresident.save(); // 🟢 Grant badge eligibility
         
-        res.json({ message: `Assigned ${student.fullName} as President` });
+        res.json({ message: `Assigned ${newPresident.fullName} as President` });
     } catch (err) { 
         console.error("Assign President Error:", err);
         res.status(500).json({ message: "Server Error" }); 
     }
 });
 
-// 🟢 FIX: REMOVE PRESIDENT
+// 🟢 UPDATE: REMOVE PRESIDENT (Handles Badge Logic)
 router.put('/remove-president', fetchUser, async (req, res) => {
     try {
         if (req.user.role !== 'faculty') return res.status(403).send("Faculty Only");
@@ -173,7 +186,17 @@ router.put('/remove-president', fetchUser, async (req, res) => {
         const club = await Club.findById(req.body.clubId);
         if (!club) return res.status(404).send("Club not found");
 
-        club.president = null; // Explicitly set null
+        // 1. Find and update the current president
+        if (club.president) {
+            const president = await User.findById(club.president);
+            if (president) {
+                president.isPresident = false;
+                await president.save(); // 🟢 Remove badge eligibility
+            }
+        }
+
+        // 2. Remove from club
+        club.president = null;
         await club.save();
         
         res.json({ message: "President removed" });
