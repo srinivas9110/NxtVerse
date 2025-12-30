@@ -282,7 +282,7 @@ export default function Profile() {
                                 </div>
                                 {ledClub && (
                                     <div className="absolute -top-2 -right-2 bg-yellow-500 text-black p-1.5 rounded-lg shadow-lg" title={`President of ${ledClub.name}`}>
-                                        <Zap size={16} fill="currentColor" />
+                                        <Crown size={16} fill="currentColor" />
                                     </div>
                                 )}
                             </div>
@@ -452,7 +452,7 @@ function EditModal({ formData, setFormData, onClose, onSave }) {
                         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Visuals</h3>
                         <div className="grid grid-cols-2 gap-4">
                             <div onClick={() => avatarRef.current.click()} className="h-32 bg-white/5 rounded-xl border border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:bg-white/10 transition group"><Camera className="mb-2 text-gray-400 group-hover:text-white" /><span className="text-xs text-gray-500">Update Avatar</span><input type="file" hidden ref={avatarRef} onChange={e => handleFile(e, 'avatar')} /></div>
-                            <div onClick={() => bannerRef.current.click()} className="h-32 bg-white/5 rounded-xl border border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:bg-white/10 transition group"><Zap className="mb-2 text-gray-400 group-hover:text-white" /><span className="text-xs text-gray-500">Update Banner</span><input type="file" hidden ref={bannerRef} onChange={e => handleFile(e, 'banner')} /></div>
+                            <div onClick={() => bannerRef.current.click()} className="h-32 bg-white/5 rounded-xl border border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:bg-white/10 transition group"><Crown className="mb-2 text-gray-400 group-hover:text-white" /><span className="text-xs text-gray-500">Update Banner</span><input type="file" hidden ref={bannerRef} onChange={e => handleFile(e, 'banner')} /></div>
                         </div>
                     </div>
                     <div className="space-y-4">
