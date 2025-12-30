@@ -74,7 +74,7 @@ const ArtifactVault = ({ formData }) => {
             glow: 'shadow-orange-500/20',
             border: 'border-orange-500/30',
             bg: 'bg-orange-500/10',
-            unlocked: formData.role === 'president' || formData.role === 'faculty',
+            unlocked: formData.isPresident || formData.role === 'faculty',
             desc: "Holds a Leadership or Faculty Position."
         }
     ];
