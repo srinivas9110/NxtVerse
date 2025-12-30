@@ -1,56 +1,65 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
 import axios from 'axios';
 import {
-    Users, Plus, Search, Calendar, MapPin, Clock,
-    ChevronRight, Award, Trash2, Edit2, UserPlus, X, CheckCircle
+    Search, Users, ChevronRight, Settings,
+    Shield, UserPlus, Play, X, UserMinus, Crown,
+    Trash2, PlusCircle, Image as ImageIcon, CheckCircle, Edit2
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import YouTube from 'react-youtube';
+import { useNavigate, Link } from 'react-router-dom';
+
+// Helper for YouTube IDs
+const getYoutubeId = (url) => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+};
 
 export default function Clubs() {
     const navigate = useNavigate();
 
-    // Data States
+    // Data State
     const [clubs, setClubs] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(null);
-    const [allUsers, setAllUsers] = useState([]); // 🟢 Store for search
+    const [loading, setLoading] = useState(true);
+    const [allUsers, setAllUsers] = useState([]); // 🟢 Added for Search
 
-    // Modal States
+    // UI State
+    const [hoveredClub, setHoveredClub] = useState(null);
+    const [manageMode, setManageMode] = useState(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const [showPresidentModal, setShowPresidentModal] = useState(false);
-    
-    // 🟢 SEARCH STATES (These were missing)
+    const [showPresidentModal, setShowPresidentModal] = useState(false); // 🟢 Added
+    const hoverTimeout = useRef(null);
+
+    // Search States (For President Assignment)
     const [searchTerm, setSearchTerm] = useState("");
     const [searchResults, setSearchResults] = useState([]);
     const [selectedSearchUser, setSelectedSearchUser] = useState(null);
-    
-    // Selection States
     const [selectedClub, setSelectedClub] = useState(null);
 
-    // Form States
-    const [newClub, setNewClub] = useState({
-        name: '', description: '', category: 'Tech', 
-        logo: 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&q=80', 
-        videoUrl: ''
-    });
+    // New Club Form State
+    const [newClub, setNewClub] = useState({ name: '', description: '', logo: '', videoUrl: '' });
+
+    // Management State (For Admin Overlay)
+    const [studentSearchTerm, setStudentSearchTerm] = useState('');
+    const [studentResults, setStudentResults] = useState([]);
 
     // 1. INIT
     useEffect(() => {
         const init = async () => {
             const token = localStorage.getItem('token');
             if (!token) { navigate('/login'); return; }
+
             try {
-                // Fetch Me
                 const userRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
                 setUser(userRes.data);
 
-                // Fetch Clubs
-                const clubRes = await axios.get(`${API_URL}/api/clubs/fetchall`, { headers: { "auth-token": token } });
-                setClubs(clubRes.data);
+                const clubsRes = await axios.get(`${API_URL}/api/clubs/fetchall`, { headers: { "auth-token": token } });
+                setClubs(clubsRes.data);
 
-                // 🟢 PRE-FETCH USERS (For Search)
-                // Only if Faculty, to avoid unnecessary load for students
+                // 🟢 FETCH ALL USERS (If Faculty) - For Search Bar
                 if (userRes.data.role === 'faculty') {
                     const allRes = await axios.get(`${API_URL}/api/users/fetchall`, { headers: { "auth-token": token } });
                     setAllUsers(allRes.data);
@@ -62,7 +71,7 @@ export default function Clubs() {
         init();
     }, [navigate]);
 
-    // 🟢 SEARCH LOGIC
+    // 🟢 2. SEARCH LOGIC (For President Modal)
     useEffect(() => {
         if (searchTerm.trim() === "") {
             setSearchResults([]);
@@ -72,39 +81,65 @@ export default function Clubs() {
             u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
             u.email.toLowerCase().includes(searchTerm.toLowerCase())
         );
-        setSearchResults(filtered.slice(0, 5)); // Limit to 5 results
+        setSearchResults(filtered.slice(0, 5));
     }, [searchTerm, allUsers]);
+
+    // --- EXISTING SEARCH (For Admin Overlay) ---
+    useEffect(() => {
+        if (manageMode && studentSearchTerm.length > 2) {
+            const searchStudents = async () => {
+                const token = localStorage.getItem('token');
+                try {
+                    const res = await axios.get(`${API_URL}/api/users/fetchall`, { headers: { "auth-token": token } });
+                    const results = res.data.filter(u =>
+                        u.fullName.toLowerCase().includes(studentSearchTerm.toLowerCase()) ||
+                        u.email.toLowerCase().includes(studentSearchTerm.toLowerCase())
+                    );
+                    setStudentResults(results.slice(0, 5));
+                } catch (err) { console.error(err); }
+            };
+            const delayDebounceFn = setTimeout(() => searchStudents(), 300);
+            return () => clearTimeout(delayDebounceFn);
+        } else {
+            setStudentResults([]);
+        }
+    }, [studentSearchTerm, manageMode]);
 
     // --- ACTIONS ---
 
-    const handleCreateClub = async () => {
+    const handleCreateClub = async (e) => {
+        e.preventDefault();
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/api/clubs/create`, newClub, { headers: { "auth-token": token } });
-            setClubs([...clubs, res.data]);
+            const clubData = { ...newClub, logo: newClub.logo || "" };
+            const res = await axios.post(`${API_URL}/api/clubs/create`, clubData, { headers: { "auth-token": token } });
+            setClubs([...clubs, res.data]); 
             setShowCreateModal(false);
-            alert("Club Created Successfully!");
-        } catch (err) { alert("Failed to create club"); }
+            setNewClub({ name: '', description: '', logo: '', videoUrl: '' }); 
+            alert("🎉 Club Created Successfully!");
+        } catch (err) { alert("Error creating club"); }
     };
 
-    const handleDeleteClub = async (id) => {
-        if (!window.confirm("Delete this club?")) return;
+    const handleDeleteClub = async (clubId) => {
+        if (!window.confirm("⚠️ Are you sure you want to delete this club?")) return;
         try {
             const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/api/clubs/delete/${id}`, { headers: { "auth-token": token } });
-            setClubs(clubs.filter(c => c._id !== id));
-        } catch (err) { alert("Delete failed"); }
+            await axios.delete(`${API_URL}/api/clubs/delete/${clubId}`, { headers: { "auth-token": token } });
+            setClubs(clubs.filter(c => c._id !== clubId)); 
+            alert("🗑️ Club Deleted");
+        } catch (err) { alert("Error deleting club"); }
     };
 
-    // 🟢 ASSIGN PRESIDENT (Updated Logic)
+    // 🟢 ASSIGN PRESIDENT
     const handleAssignPresident = async () => {
         if (!selectedSearchUser) return alert("Please select a student first!");
         
         try {
             const token = localStorage.getItem('token');
+            // Sending studentId (User ID) instead of email
             const res = await axios.post(`${API_URL}/api/clubs/assign-president`, { 
                 clubId: selectedClub._id, 
-                studentId: selectedSearchUser._id // Sending ID now
+                studentId: selectedSearchUser._id 
             }, { headers: { "auth-token": token } });
             
             alert(res.data.message);
@@ -112,137 +147,219 @@ export default function Clubs() {
             setSelectedSearchUser(null);
             setSearchTerm("");
             
-            // Refresh List
+            // Refresh
             const clubRes = await axios.get(`${API_URL}/api/clubs/fetchall`, { headers: { "auth-token": token } });
             setClubs(clubRes.data);
-
+            
         } catch (err) {
-            console.error(err);
-            alert("❌ " + (err.response?.data?.message || "Failed to assign"));
+            alert("❌ " + (err.response?.data?.message || "Failed to assign President"));
         }
     };
 
     const handleRemovePresident = async (clubId) => {
-        if (!window.confirm("Remove current President?")) return;
+        if (!window.confirm("Vacate the President position?")) return;
         try {
             const token = localStorage.getItem('token');
             await axios.put(`${API_URL}/api/clubs/remove-president`, { clubId }, { headers: { "auth-token": token } });
             
-            // Refresh
-            const clubRes = await axios.get(`${API_URL}/api/clubs/fetchall`, { headers: { "auth-token": token } });
-            setClubs(clubRes.data);
+            // Refresh locally
+            const updatedClubs = clubs.map(c => {
+                if (c._id === clubId) return { ...c, president: null };
+                return c;
+            });
+            setClubs(updatedClubs);
             alert("President removed.");
-        } catch (err) { alert("Failed"); }
+        } catch (err) { alert("Failed to remove."); }
     };
 
-    if (loading) return <div className="p-8 text-gray-500 bg-[#050505] min-h-screen">Loading Clubs...</div>;
+    // Helpers
+    const handleMouseEnter = (clubId) => {
+        if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+        hoverTimeout.current = setTimeout(() => setHoveredClub(clubId), 200);
+    };
 
-    const isFaculty = user?.role === 'faculty';
+    const handleMouseLeave = () => {
+        if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+        setHoveredClub(null);
+    };
+
+    const handleRemoveVideo = async (clubId) => {
+        if (!window.confirm("Remove the video banner?")) return;
+        setHoveredClub(null);
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`${API_URL}/api/clubs/update/${clubId}`, { videoUrl: "" }, { headers: { "auth-token": token } });
+            const defaultVideo = 'https://www.youtube.com/watch?v=2i8s1c2j9Q0';
+            setClubs(clubs.map(c => c._id === clubId ? { ...c, videoUrl: defaultVideo } : c));
+            alert("✅ Video removed");
+        } catch (err) { alert("Failed to remove video."); }
+    };
+
+    const handleUpdateVideo = async (clubId) => {
+        setHoveredClub(null);
+        const newUrl = prompt("Enter new YouTube URL for Club Banner:");
+        if (!newUrl) return;
+        if (!getYoutubeId(newUrl)) { alert("❌ Invalid YouTube URL."); return; }
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`${API_URL}/api/clubs/update/${clubId}`, { videoUrl: newUrl }, { headers: { "auth-token": token } });
+            setClubs(clubs.map(c => c._id === clubId ? { ...c, videoUrl: newUrl } : c));
+            alert("✅ Video Banner Updated!");
+        } catch (err) { alert("Failed to update video."); }
+    };
+
+    if (loading) return <div className="bg-[#09090b] min-h-screen text-white p-10">Loading Network...</div>;
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white p-6 md:p-8 relative">
-            <div className="fixed top-0 right-0 w-[500px] h-[500px] bg-purple-600/10 blur-[150px] rounded-full pointer-events-none"></div>
-
-            {/* HEADER */}
-            <div className="flex justify-between items-end mb-8 relative z-10">
+        <div className="min-h-screen bg-[#09090b] text-white p-6 md:p-12">
+            <div className="max-w-7xl mx-auto mb-12 flex justify-between items-end">
                 <div>
-                    <h1 className="text-3xl font-bold flex items-center gap-3"><Award className="text-purple-500" /> Student Clubs</h1>
-                    <p className="text-gray-400 font-medium mt-1">Join a community, lead a workshop, or build a legacy.</p>
+                    <h1 className="text-4xl font-bold mb-2">Student Clubs</h1>
+                    <p className="text-gray-400">Join a community. Lead a movement.</p>
                 </div>
-                {isFaculty && (
-                    <button onClick={() => setShowCreateModal(true)} className="bg-white text-black px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-200 transition-all">
-                        <Plus size={18} /> New Club
+
+                {user?.role === 'faculty' && (
+                    <button onClick={() => setShowCreateModal(true)} className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-purple-900/20">
+                        <PlusCircle size={20} /> Create New Club
                     </button>
                 )}
             </div>
 
-            {/* GRID */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
-                {clubs.map(club => (
-                    <div key={club._id} className="bg-[#121214] border border-white/5 rounded-2xl overflow-hidden group hover:border-purple-500/30 transition-all hover:shadow-2xl hover:shadow-purple-900/10 flex flex-col">
-                        <div className="h-32 bg-gray-800 relative">
-                            <img src={club.logo} alt={club.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-all" />
-                            <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold border border-white/10 uppercase tracking-wider">
-                                {club.category}
-                            </div>
-                        </div>
-                        
-                        <div className="p-6 flex-1 flex flex-col">
-                            <h3 className="text-xl font-bold text-white mb-2">{club.name}</h3>
-                            <p className="text-gray-400 text-sm line-clamp-2 mb-6 flex-1">{club.description}</p>
+            <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {clubs.map((club) => {
+                    const videoId = getYoutubeId(club.videoUrl || 'https://www.youtube.com/watch?v=2i8s1c2j9Q0');
 
-                            {/* President Section */}
-                            <div className="bg-black/40 rounded-xl p-3 border border-white/5 mb-4 flex items-center justify-between">
-                                {club.president ? (
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center font-bold text-sm">
-                                            {club.president.fullName[0]}
-                                        </div>
-                                        <div>
-                                            <p className="text-xs text-gray-500 font-bold uppercase">President</p>
-                                            <p className="text-sm font-bold text-white">{club.president.fullName}</p>
-                                        </div>
+                    return (
+                        <div key={club._id} onMouseEnter={() => handleMouseEnter(club._id)} onMouseLeave={handleMouseLeave} className="group relative bg-[#121214] border border-white/5 rounded-3xl overflow-hidden transition-all duration-500 hover:shadow-2xl hover:shadow-purple-900/20 hover:-translate-y-2 flex flex-col h-[480px]">
+                            
+                            {/* DELETE BUTTON */}
+                            {user?.role === 'faculty' && (
+                                <button onClick={(e) => { e.stopPropagation(); handleDeleteClub(club._id); }} className="absolute top-4 left-4 z-40 p-2 bg-red-500/80 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity" title="Delete Club">
+                                    <Trash2 size={16} />
+                                </button>
+                            )}
+
+                            {/* 1. MEDIA LAYER */}
+                            <div className="relative h-[55%] overflow-hidden bg-black z-0">
+                                {hoveredClub === club._id && manageMode !== club._id ? (
+                                    <div className="absolute inset-0 w-[150%] h-[150%] -top-[25%] -left-[25%] pointer-events-none opacity-80">
+                                        <YouTube videoId={videoId} opts={{ height: '100%', width: '100%', playerVars: { autoplay: 1, controls: 0, mute: 1, loop: 1, playlist: videoId, modestbranding: 1, rel: 0, showinfo: 0 } }} className="w-full h-full" />
                                     </div>
                                 ) : (
-                                    <div className="flex items-center gap-2 text-gray-500 text-sm italic">
-                                        <UserPlus size={16} /> No President Assigned
+                                    <div className="absolute inset-0">
+                                        <img src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`} alt="cover" className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-all duration-700" />
                                     </div>
                                 )}
+                                <div className="absolute inset-0 bg-gradient-to-t from-[#121214] via-transparent to-transparent pointer-events-none"></div>
+                                {user?.role === 'faculty' && (
+                                    <button onClick={() => { setManageMode(club._id); setHoveredClub(null); }} className="absolute top-4 right-4 p-2.5 bg-black/50 backdrop-blur-md text-gray-300 hover:text-white rounded-full border border-white/10 hover:bg-purple-600 transition-all z-30">
+                                        <Settings size={18} />
+                                    </button>
+                                )}
+                            </div>
 
-                                {isFaculty && (
-                                    <div className="flex gap-2">
-                                        <button 
-                                            onClick={() => { setSelectedClub(club); setShowPresidentModal(true); }} 
-                                            className="p-2 hover:bg-white/10 rounded-lg text-blue-400 transition-all" 
-                                            title="Assign President"
-                                        >
-                                            <Edit2 size={14} />
+                            {/* 2. CONTENT LAYER */}
+                            <div className="relative h-[45%] p-6 flex flex-col bg-[#121214] z-10">
+                                <div className="absolute -top-12 right-6 z-20">
+                                    {club.president ? (
+                                        <div className="group/pres relative cursor-pointer" title={`President: ${club.president.fullName}`}>
+                                            <div className="w-24 h-24 rounded-full border-4 border-[#121214] bg-[#18181b] overflow-hidden shadow-xl">
+                                                {club.president.profilePic ? (
+                                                    <img src={`${API_URL}${club.president.profilePic}`} alt="Pres" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600 to-blue-600 text-2xl font-bold text-white">
+                                                        {club.president.fullName?.charAt(0)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="absolute bottom-0 right-0 bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-[#121214]">President</div>
+                                        </div>
+                                    ) : (
+                                        <div className="w-20 h-20 rounded-full border-4 border-[#121214] bg-white/5 flex items-center justify-center text-gray-600 border-dashed">
+                                            <Users size={24} />
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mb-auto mt-4">
+                                    <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">{club.name}</h2>
+                                    <p className="text-sm text-gray-400 font-medium line-clamp-2 leading-relaxed">{club.description || "Building the future."}</p>
+                                </div>
+
+                                {/* 🟢 ASSIGN BUTTON (Faculty Only) */}
+                                {user?.role === 'faculty' && (
+                                    <div className="flex gap-2 mb-2">
+                                        <button onClick={() => { setSelectedClub(club); setShowPresidentModal(true); }} className="text-xs text-blue-400 hover:text-white flex items-center gap-1">
+                                            <Edit2 size={12} /> {club.president ? 'Change President' : 'Assign President'}
                                         </button>
                                         {club.president && (
-                                            <button 
-                                                onClick={() => handleRemovePresident(club._id)} 
-                                                className="p-2 hover:bg-white/10 rounded-lg text-red-400 transition-all" 
-                                                title="Remove President"
-                                            >
-                                                <X size={14} />
+                                            <button onClick={() => handleRemovePresident(club._id)} className="text-xs text-red-400 hover:text-white flex items-center gap-1">
+                                                <X size={12} /> Remove
                                             </button>
                                         )}
                                     </div>
                                 )}
+
+                                <Link to={`/clubs/${club._id}`} className="w-full mt-2 py-3.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all group-hover:border-purple-500/30 group-hover:text-white text-gray-300">
+                                    Visit HQ <ChevronRight size={16} />
+                                </Link>
                             </div>
 
-                            <button onClick={() => navigate(`/clubs/${club._id}`)} className="w-full py-3 bg-white/5 hover:bg-purple-600 hover:text-white rounded-xl font-bold text-sm text-gray-300 transition-all flex items-center justify-center gap-2 border border-white/5">
-                                Explore Club <ChevronRight size={16} />
-                            </button>
-                            
-                            {isFaculty && (
-                                <button onClick={() => handleDeleteClub(club._id)} className="w-full mt-2 py-2 text-xs text-red-500 hover:text-red-400 font-bold flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Trash2 size={12} /> Delete Club
-                                </button>
+                            {/* 3. ADMIN OVERLAY (Existing) */}
+                            {manageMode === club._id && (
+                                <div className="absolute inset-0 bg-[#09090b]/95 backdrop-blur-md z-50 p-6 flex flex-col animate-in slide-in-from-bottom duration-300">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h3 className="font-bold text-lg flex items-center gap-2 text-purple-400"><Shield size={18} /> Admin Control</h3>
+                                        <button onClick={() => setManageMode(null)} className="p-2 hover:bg-white/10 rounded-full"><X size={18} /></button>
+                                    </div>
+                                    <div className="space-y-4 flex-1 overflow-y-auto">
+                                        <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                                            <p className="text-[10px] text-gray-500 uppercase font-bold mb-3 tracking-wider">Visuals</p>
+                                            <button onClick={() => handleUpdateVideo(club._id)} className="w-full py-2 bg-black/40 hover:bg-black/60 border border-white/10 rounded-lg text-sm text-blue-400 hover:text-blue-300 flex items-center justify-center gap-2 transition-all">
+                                                <Play size={14} /> Update Banner Video
+                                            </button>
+                                            <button onClick={() => handleRemoveVideo(club._id)} className="w-full mt-2 py-2 text-xs text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all flex items-center justify-center gap-2">
+                                                <Trash2 size={12} /> Remove Custom Video
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             )}
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
-            {/* CREATE MODAL */}
+            {/* CREATE CLUB MODAL */}
             {showCreateModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-[#18181b] border border-white/10 p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
-                        <button onClick={() => setShowCreateModal(false)} className="absolute top-6 right-6 text-gray-500 hover:text-white"><X /></button>
-                        <h2 className="text-2xl font-bold mb-6">Create New Club</h2>
-                        <div className="space-y-4">
-                            <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Club Name" onChange={e => setNewClub({ ...newClub, name: e.target.value })} />
-                            <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Category (Tech, Art, etc)" onChange={e => setNewClub({ ...newClub, category: e.target.value })} />
-                            <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Cover Image URL" onChange={e => setNewClub({ ...newClub, logo: e.target.value })} />
-                            <textarea className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" rows="3" placeholder="Description" onChange={e => setNewClub({ ...newClub, description: e.target.value })} />
-                            <button onClick={handleCreateClub} className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200">Launch Club</button>
-                        </div>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-[#121214] border border-white/10 rounded-3xl p-8 w-full max-w-md relative animate-in zoom-in-95 duration-200 shadow-2xl">
+                        <button onClick={() => setShowCreateModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white p-2"><X size={20} /></button>
+                        <h2 className="text-2xl font-bold mb-6 text-white">Create New Club</h2>
+                        <form onSubmit={handleCreateClub} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Club Name</label>
+                                <input type="text" required className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-purple-500 outline-none transition-all" placeholder="e.g. Coding Club" value={newClub.name} onChange={(e) => setNewClub({ ...newClub, name: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-2"><ImageIcon size={12} /> Club Logo (Image URL)</label>
+                                <input type="text" className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-purple-500 outline-none transition-all" placeholder="https://example.com/logo.png" value={newClub.logo} onChange={(e) => setNewClub({ ...newClub, logo: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Description</label>
+                                <textarea required className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-purple-500 outline-none transition-all h-24 resize-none" placeholder="What is this club about?" value={newClub.description} onChange={(e) => setNewClub({ ...newClub, description: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Banner Video (YouTube URL)</label>
+                                <input type="text" className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-purple-500 outline-none transition-all" placeholder="https://youtube.com/..." value={newClub.videoUrl} onChange={(e) => setNewClub({ ...newClub, videoUrl: e.target.value })} />
+                            </div>
+                            <button type="submit" className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 rounded-xl font-bold text-white transition-all shadow-lg shadow-purple-900/20 mt-4">🚀 Launch Club</button>
+                        </form>
                     </div>
                 </div>
             )}
 
-            {/* 🟢 ASSIGN PRESIDENT MODAL */}
+            {/* 🟢 PRESIDENT ASSIGNMENT MODAL (Fixed Search Logic) */}
             {showPresidentModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#18181b] border border-white/10 p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
