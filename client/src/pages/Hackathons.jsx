@@ -5,7 +5,7 @@ import {
     Users, Rocket, Plus, X, Sword, Github, ExternalLink,
     Sliders, TrendingUp, Trash2, Calendar,
     CheckCircle, ChevronDown, Crown, Zap, UserMinus, Eye,
-    MessageSquare, UserCheck, XCircle, User
+    MessageSquare, UserCheck, XCircle, User, AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -55,11 +55,11 @@ export default function Hackathons() {
     const [showCreateSquad, setShowCreateSquad] = useState(false);
     const [showLaunchpad, setShowLaunchpad] = useState(false);
     const [showCreateHack, setShowCreateHack] = useState(false);
-    const [showManageEvent, setShowManageEvent] = useState(false); // 👈 RESTORED
+    const [showManageEvent, setShowManageEvent] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
 
-    // 🆕 Applicants Modal State
-    const [viewApplicants, setViewApplicants] = useState(null); // { teamId, role, applicants: [] }
+    // Applicants Modal State
+    const [viewApplicants, setViewApplicants] = useState(null); 
 
     // Forms
     const [newSquadName, setNewSquadName] = useState("");
@@ -105,7 +105,18 @@ export default function Hackathons() {
     }, [activeHack]);
 
     // Helpers
-    const addRoleTag = () => { if (currentRoleInput.trim()) { setSquadRoles([...squadRoles, currentRoleInput.trim()]); setCurrentRoleInput(""); } };
+    const addRoleTag = () => { 
+        if (currentRoleInput.trim()) { 
+            // 🟢 VALIDATION: Check Role Limit
+            const maxRoles = (activeHack?.teamSize?.max || 5) - 1;
+            if (squadRoles.length >= maxRoles) {
+                alert(`Strategy Limit Reached: You can only recruit ${maxRoles} allies.`);
+                return;
+            }
+            setSquadRoles([...squadRoles, currentRoleInput.trim()]); 
+            setCurrentRoleInput(""); 
+        } 
+    };
     const removeRoleTag = (index) => { setSquadRoles(squadRoles.filter((_, i) => i !== index)); };
 
     // --- ACTIONS ---
@@ -124,7 +135,6 @@ export default function Hackathons() {
         } catch (err) { alert(err.response?.data?.message || "Failed"); }
     };
 
-    // 🆕 APPLICATION FLOW
     const handleApply = async (teamId, role) => {
         if (!window.confirm(`Apply to join as ${role}?`)) return;
         try {
@@ -140,7 +150,7 @@ export default function Hackathons() {
             const token = localStorage.getItem('token');
             await axios.put(`${API_URL}/api/hackathons/team/accept/${teamId}`, { applicantId, role }, { headers: { "auth-token": token } });
             alert("✅ Member Accepted!");
-            setViewApplicants(null); // Close modal
+            setViewApplicants(null); 
             fetchTeams();
         } catch (err) { alert(err.response?.data?.message || "Failed"); }
     };
@@ -155,7 +165,6 @@ export default function Hackathons() {
         } catch (err) { alert("Failed"); }
     };
 
-    // 🆕 REMOVE MEMBER
     const handleRemoveMember = async (teamId, memberId) => {
         if (!window.confirm("Remove this member from the squad?")) return;
         try {
@@ -165,7 +174,6 @@ export default function Hackathons() {
         } catch (err) { alert(err.response?.data?.message || "Failed"); }
     };
 
-    // MANAGE EVENT ACTIONS
     const handleUpdateStatus = async (status) => {
         try {
             const token = localStorage.getItem('token');
@@ -192,7 +200,10 @@ export default function Hackathons() {
             setShowLaunchpad(false);
             alert("🚀 Project Launched!");
             fetchTeams();
-        } catch (err) { alert("Failed"); }
+        } catch (err) { 
+            // 🟢 Show Real Error (e.g. Min Team Size)
+            alert("❌ " + (err.response?.data?.message || "Submission Failed")); 
+        }
     };
 
     const handlePostScore = async (teamId, scoreData) => {
@@ -207,9 +218,16 @@ export default function Hackathons() {
     const handleCreateHackathon = async () => {
         try {
             const token = localStorage.getItem('token');
-            await axios.post(`${API_URL}/api/hackathons/create`, newEvent, { headers: { "auth-token": token } });
-            window.location.reload();
-        } catch (err) { alert("Error"); }
+            const res = await axios.post(`${API_URL}/api/hackathons/create`, newEvent, { headers: { "auth-token": token } });
+            setHackathons(prev => [res.data, ...prev]);
+            setActiveHack(res.data);
+            setShowCreateHack(false);
+            setNewEvent({ title: '', date: '', description: '', minTeamSize: 2, maxTeamSize: 5 });
+            alert("✅ Event Published Successfully!");
+        } catch (err) { 
+            console.error(err);
+            alert("❌ Creation Failed: " + (err.response?.data?.error || "Server Error")); 
+        }
     };
 
     if (loading) return <div className="p-8 text-gray-500 bg-[#050505] min-h-screen">Loading The Arena...</div>;
@@ -219,7 +237,6 @@ export default function Hackathons() {
     const userActiveTeam = teams.find(t => t.leader._id === user?._id || t.members.some(m => m.user._id === user?._id));
     const userIsActive = !!userActiveTeam;
 
-    // Engagement Text (Hidden if no active hack)
     let engagementText = "";
     if (activeHack) {
         if (teams.length === 0) engagementText = "Be the first to forge a legacy. Create a squad now.";
@@ -268,7 +285,6 @@ export default function Hackathons() {
                     <button onClick={() => setActiveTab('squads')} className={`px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'squads' ? 'bg-white text-black' : 'bg-[#121214] text-gray-500 border border-white/5'}`}><Users size={16} /> Squad Forge</button>
                     <button onClick={() => setActiveTab('grid')} className={`px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'grid' ? 'bg-white text-black' : 'bg-[#121214] text-gray-500 border border-white/5'}`}><TrendingUp size={16} /> Podium</button>
                 </div>
-                {/* 🟢 Banner shows ONLY if there is an activeHack */}
                 {activeTab === 'squads' && activeHack && engagementText && (
                     <div className="text-xs font-bold text-purple-400 bg-purple-500/10 px-4 py-2 rounded-full border border-purple-500/20 animate-pulse flex items-center gap-2">
                         <Zap size={12} /> {engagementText}
@@ -294,6 +310,9 @@ export default function Hackathons() {
                             const isLeader = team.leader._id === user._id;
                             const isFull = team.members.length >= (activeHack.teamSize?.max || 5);
 
+                            // 🟢 1. Create a copy of roles looking for
+                            let remainingLookingFor = [...team.lookingFor];
+
                             return (
                                 <div key={team._id} className={`bg-[#121214] rounded-2xl p-6 border border-white/5 hover:border-purple-500/30 transition-all duration-300 hover:shadow-2xl hover:shadow-purple-900/10 group flex flex-col h-full ${userIsActive && !isMember && !isFaculty ? 'opacity-60 grayscale' : ''}`}>
 
@@ -310,7 +329,18 @@ export default function Hackathons() {
 
                                     {/* Members List */}
                                     <div className="space-y-2 mb-6 flex-1">
-                                        {team.members.map((m, idx) => (
+                                        {team.members.map((m, idx) => {
+                                            // 🟢 2. Remove role from list if filled
+                                            const filledRoleIndex = remainingLookingFor.findIndex(r => r.toLowerCase() === m.role.toLowerCase());
+                                            if (filledRoleIndex !== -1) {
+                                                 remainingLookingFor.splice(filledRoleIndex, 1);
+                                            }
+
+                                            const roleApplicants = team.requests?.filter(r => r.role === m.role);
+                                            const hasApplied = roleApplicants?.some(r => r.user._id === user._id);
+                                            const applicantCount = roleApplicants?.length || 0;
+
+                                            return (
                                             <div key={idx} className="flex justify-between items-center p-2 rounded-lg bg-black/40 border border-white/5 group/member">
                                                 <div className="flex items-center gap-2">
                                                     <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
@@ -318,7 +348,22 @@ export default function Hackathons() {
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-[10px] text-gray-500 uppercase font-bold">{m.role}</span>
-                                                    {/* 🆕 REMOVE MEMBER BUTTON (Leader Only) */}
+                                                    
+                                                    {/* 🟢 COMPETITIVE APPLY */}
+                                                    {!userIsActive && isRegistrationOpen && !isFaculty && !isFull && !hasApplied && m.user._id !== user._id && (
+                                                        <button onClick={() => handleApply(team._id, m.role)} className="opacity-0 group-hover/member:opacity-100 text-[9px] bg-blue-600 hover:bg-blue-500 text-white px-1.5 py-0.5 rounded transition-all">
+                                                            Challenge
+                                                        </button>
+                                                    )}
+
+                                                    {/* VIEW WAITLIST */}
+                                                    {isLeader && applicantCount > 0 && (
+                                                        <button onClick={() => setViewApplicants({ teamId: team._id, role: m.role, applicants: roleApplicants })} className="flex items-center gap-1 text-[10px] font-bold bg-blue-500/20 text-blue-400 px-2 py-1 rounded hover:bg-blue-500 hover:text-white transition-all">
+                                                            <User size={12} /> {applicantCount}
+                                                        </button>
+                                                    )}
+
+                                                    {/* REMOVE */}
                                                     {isLeader && m.user._id !== user._id && (
                                                         <button onClick={() => handleRemoveMember(team._id, m.user._id)} className="opacity-0 group-hover/member:opacity-100 text-red-500 hover:bg-red-500/10 p-1 rounded transition-all">
                                                             <UserMinus size={12} />
@@ -326,13 +371,12 @@ export default function Hackathons() {
                                                     )}
                                                 </div>
                                             </div>
-                                        ))}
+                                        )})}
 
-                                        {/* Open Roles */}
-                                        {team.lookingFor.map((role, idx) => {
-                                            // 🟢 LOGIC: Check if user applied for THIS specific role
+                                        {/* 🟢 3. Open Roles */}
+                                        {remainingLookingFor.map((role, idx) => {
                                             const roleApplicants = team.requests?.filter(r => r.role === role);
-                                            const hasAppliedForThisRole = roleApplicants?.some(r => r.user._id === user._id);
+                                            const hasApplied = roleApplicants?.some(r => r.user._id === user._id);
                                             const applicantCount = roleApplicants?.length || 0;
 
                                             return (
@@ -343,25 +387,19 @@ export default function Hackathons() {
                                                     </div>
 
                                                     <div className="flex items-center gap-2">
-                                                        {/* 🟢 LEADER VIEW: Show Applicant Count Button */}
                                                         {isLeader && applicantCount > 0 && (
-                                                            <button
-                                                                onClick={() => setViewApplicants({ teamId: team._id, role, applicants: roleApplicants })}
-                                                                className="flex items-center gap-1 text-[10px] font-bold bg-blue-500/20 text-blue-400 px-2 py-1 rounded hover:bg-blue-500 hover:text-white transition-all"
-                                                            >
+                                                            <button onClick={() => setViewApplicants({ teamId: team._id, role, applicants: roleApplicants })} className="flex items-center gap-1 text-[10px] font-bold bg-blue-500/20 text-blue-400 px-2 py-1 rounded hover:bg-blue-500 hover:text-white transition-all">
                                                                 <User size={12} /> {applicantCount}
                                                             </button>
                                                         )}
 
-                                                        {/* APPLY BUTTON (Visible if not leader, not member, role open) */}
-                                                        {!userIsActive && isRegistrationOpen && !isFaculty && !isFull && !hasAppliedForThisRole && (
+                                                        {!userIsActive && isRegistrationOpen && !isFaculty && !isFull && !hasApplied && (
                                                             <button onClick={() => handleApply(team._id, role)} className="text-[10px] font-bold text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 px-2 py-1 rounded transition-all">
                                                                 APPLY
                                                             </button>
                                                         )}
 
-                                                        {/* PENDING STATUS (Only for this specific role) */}
-                                                        {hasAppliedForThisRole && <span className="text-[10px] text-yellow-500 font-bold bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500/20">Pending</span>}
+                                                        {hasApplied && <span className="text-[10px] text-yellow-500 font-bold bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500/20">Pending</span>}
                                                     </div>
                                                 </div>
                                             );
@@ -415,7 +453,6 @@ export default function Hackathons() {
 
             {/* --- MODALS --- */}
 
-            {/* 🆕 VIEW APPLICANTS MODAL (Leader Only) */}
             {viewApplicants && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#18181b] border border-white/10 p-6 rounded-2xl w-full max-w-sm relative shadow-2xl">
@@ -438,7 +475,6 @@ export default function Hackathons() {
                 </div>
             )}
 
-            {/* CREATE SQUAD */}
             {showCreateSquad && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#18181b] border border-white/10 p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
@@ -446,6 +482,13 @@ export default function Hackathons() {
                         <h2 className="text-xl font-bold mb-6 text-white">Assemble Squad</h2>
                         <div className="space-y-4">
                             <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Squad Name" value={newSquadName} onChange={e => setNewSquadName(e.target.value)} />
+                            
+                            {/* 🟢 STRATEGY LIMIT INFO */}
+                            <div className="flex justify-between text-xs text-gray-500 font-bold uppercase tracking-wider">
+                                <span>Define Roles</span>
+                                <span>{squadRoles.length} / {(activeHack?.teamSize?.max || 5) - 1} slots</span>
+                            </div>
+
                             <div>
                                 <div className="flex gap-2 mb-2">
                                     <input className="flex-1 bg-black/40 border border-white/10 p-3 rounded-xl text-white text-sm" placeholder="Add Role (e.g. Designer)" value={currentRoleInput} onChange={e => setCurrentRoleInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRoleTag()} />
@@ -461,7 +504,6 @@ export default function Hackathons() {
                 </div>
             )}
 
-            {/* SUBMISSION MODAL */}
             {showLaunchpad && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#18181b] border border-white/10 p-8 rounded-3xl w-full max-w-lg relative shadow-2xl">
@@ -488,8 +530,8 @@ export default function Hackathons() {
                             <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Event Title" onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} />
                             <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Date string" onChange={e => setNewEvent({ ...newEvent, date: e.target.value })} />
                             <div className="flex gap-2">
-                                <input type="number" className="w-1/2 bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Min Size" onChange={e => setNewEvent({ ...newEvent, minTeamSize: e.target.value })} />
-                                <input type="number" className="w-1/2 bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Max Size" onChange={e => setNewEvent({ ...newEvent, maxTeamSize: e.target.value })} />
+                                <input type="number" min="1" className="w-1/2 bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Min Size" onChange={e => setNewEvent({ ...newEvent, minTeamSize: e.target.value })} />
+                                <input type="number" min="1" className="w-1/2 bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Max Size" onChange={e => setNewEvent({ ...newEvent, maxTeamSize: e.target.value })} />
                             </div>
                             <textarea className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" rows="3" placeholder="Description" onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} />
                             <button onClick={handleCreateHackathon} className="w-full bg-white text-black font-bold py-3 rounded-xl mt-2">Publish Event</button>
@@ -498,7 +540,6 @@ export default function Hackathons() {
                 </div>
             )}
 
-            {/* MANAGE EVENT MODAL - UPDATED UI */}
             {showManageEvent && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#121214] border border-white/10 p-6 rounded-2xl w-full max-w-sm relative shadow-2xl">
