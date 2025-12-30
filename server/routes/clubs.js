@@ -2,11 +2,11 @@ const express = require('express');
 const router = express.Router();
 const Club = require('../models/Club');
 const Workshop = require('../models/Workshop');
-const Chat = require('../models/Chat'); // ✅ New
-const ClubPost = require('../models/ClubPost'); // ✅ Added missing model import
+const Chat = require('../models/Chat');
+const ClubPost = require('../models/ClubPost');
 const fetchUser = require('../middleware/fetchUser');
-const cloudinary = require('cloudinary').v2; // ✅ Added Cloudinary
-const Message = require('../models/Message');
+const cloudinary = require('cloudinary').v2;
+const User = require('../models/User'); // 🟢 Added User Model
 
 // Configure Cloudinary
 cloudinary.config({
@@ -16,34 +16,31 @@ cloudinary.config({
 });
 
 // ==========================================
-// 1. NEW GEN WORKSHOP LOGIC (Chat & Feedback)
+// 1. NEW GEN WORKSHOP LOGIC
 // ==========================================
 
-// ADD WORKSHOP (Creates Broadcast Channel)
+// ADD WORKSHOP
 router.post('/workshop/add', fetchUser, async (req, res) => {
     try {
         const { clubId, title, date, time, venue, description } = req.body;
 
-        // A. Create the "Ghost" Broadcast Channel
         const newChat = new Chat({
             chatName: `${title} - Announcements`,
             isGroupChat: true,
-            isAnnouncement: true, // 🔒 Only Admins can text
-            groupAdmins: [req.user.id], // President is Admin
-            users: [req.user.id] // President is first member
+            isAnnouncement: true,
+            groupAdmins: [req.user.id],
+            users: [req.user.id]
         });
         const savedChat = await newChat.save();
 
-        // B. Create Workshop linked to that Chat
         const workshop = new Workshop({
             clubId, title, date, time, venue, description,
-            chatGroupId: savedChat._id, // 🔗 Link established
+            chatGroupId: savedChat._id,
             organizers: [req.user.id]
         });
         
         const savedWorkshop = await workshop.save();
         
-        // Update chat to link back
         savedChat.relatedWorkshopId = savedWorkshop._id;
         await savedChat.save();
 
@@ -54,13 +51,12 @@ router.post('/workshop/add', fetchUser, async (req, res) => {
     }
 });
 
-// REGISTER (Modified to check Status)
+// REGISTER
 router.post('/workshop/:id/register', fetchUser, async (req, res) => {
     try {
         const workshop = await Workshop.findById(req.params.id);
         if (!workshop) return res.status(404).json({ error: "Not Found" });
 
-        // 🟢 FIX: Block registration if Live or Completed
         if (workshop.status !== 'upcoming') {
             return res.status(400).json({ error: "Registration is closed." });
         }
@@ -84,7 +80,7 @@ router.post('/workshop/:id/register', fetchUser, async (req, res) => {
     }
 });
 
-// FEEDBACK (Cafe Style)
+// FEEDBACK
 router.post('/workshop/:id/feedback', fetchUser, async (req, res) => {
     try {
         const { pacing, clarity, vibe, overall } = req.body;
@@ -104,7 +100,7 @@ router.post('/workshop/:id/feedback', fetchUser, async (req, res) => {
 });
 
 // ==========================================
-// 2. EXISTING CLUB & POST ROUTES
+// 2. CLUB MANAGEMENT (Admins/Presidents)
 // ==========================================
 
 // Get All Clubs
@@ -130,7 +126,7 @@ router.post('/create', fetchUser, async (req, res) => {
     } catch (error) { res.status(500).send("Server Error"); }
 });
 
-// Update Club Details
+// Update Club
 router.put('/update/:id', fetchUser, async (req, res) => {
     try {
         if (req.user.role !== 'faculty') return res.status(403).send("Access Denied");
@@ -144,28 +140,42 @@ router.put('/update/:id', fetchUser, async (req, res) => {
     } catch (err) { res.status(500).send("Update Failed"); }
 });
 
-// Assign President
+// 🟢 FIX: ASSIGN PRESIDENT (Uses ID now)
 router.post('/assign-president', fetchUser, async (req, res) => {
     try {
-        if (req.user.role !== 'faculty') return res.status(403).send("Faculty Only");
-        const { clubId, studentEmail } = req.body;
-        const student = await User.findOne({ email: studentEmail });
-        if (!student) return res.status(404).json({ message: "Student email not found" });
+        if (req.user.role !== 'faculty') return res.status(403).json({ message: "Faculty Only" });
+        
+        // Expecting studentId from frontend search result
+        const { clubId, studentId } = req.body; 
+        
+        const student = await User.findById(studentId);
+        if (!student) return res.status(404).json({ message: "Student not found" });
 
         const club = await Club.findById(clubId);
+        if (!club) return res.status(404).json({ message: "Club not found" });
+
+        // Update Logic
         club.president = student._id;
         await club.save();
+        
         res.json({ message: `Assigned ${student.fullName} as President` });
-    } catch (err) { res.status(500).send("Server Error"); }
+    } catch (err) { 
+        console.error("Assign President Error:", err);
+        res.status(500).json({ message: "Server Error" }); 
+    }
 });
 
-// Remove President
+// 🟢 FIX: REMOVE PRESIDENT
 router.put('/remove-president', fetchUser, async (req, res) => {
     try {
         if (req.user.role !== 'faculty') return res.status(403).send("Faculty Only");
+        
         const club = await Club.findById(req.body.clubId);
-        club.president = undefined;
+        if (!club) return res.status(404).send("Club not found");
+
+        club.president = null; // Explicitly set null
         await club.save();
+        
         res.json({ message: "President removed" });
     } catch (err) { res.status(500).send("Server Error"); }
 });
@@ -185,48 +195,37 @@ router.get('/:id', fetchUser, async (req, res) => {
     } catch (err) { res.status(500).send("Server Error"); }
 });
 
-// Workshop Organizer Toggle (NOW SYNCS WITH CHAT ADMINS 🔄)
+// Workshop Organizer Toggle
 router.put('/workshop/:id/organizer', fetchUser, async (req, res) => {
     try {
         const { studentId } = req.body;
-        
-        // 1. Validation
         if (studentId === req.user.id) return res.status(400).json({ error: "Cannot assign yourself" });
 
         const workshop = await Workshop.findById(req.params.id);
         if (!workshop) return res.status(404).send("Workshop not found");
 
-        // 2. Toggle Logic
-        let action = ''; // 'added' or 'removed'
-
+        let action = '';
         if (workshop.organizers.includes(studentId)) {
-            // Remove
             workshop.organizers = workshop.organizers.filter(id => id.toString() !== studentId);
             action = 'removed';
         } else {
-            // Add
             workshop.organizers.push(studentId);
             action = 'added';
         }
         await workshop.save();
 
-        // 3. 🟢 CRITICAL FIX: Sync with Chat Group
         if (workshop.chatGroupId) {
             if (action === 'added') {
                 await Chat.findByIdAndUpdate(workshop.chatGroupId, {
-                    $addToSet: { 
-                        groupAdmins: studentId, // Make them Admin 🛡️
-                        users: studentId        // Ensure they are in the group
-                    }
+                    $addToSet: { groupAdmins: studentId, users: studentId }
                 });
             } else {
                 await Chat.findByIdAndUpdate(workshop.chatGroupId, {
-                    $pull: { groupAdmins: studentId } // Revoke Admin ❌
+                    $pull: { groupAdmins: studentId }
                 });
             }
         }
 
-        // 4. Return Updated Data
         const updated = await Workshop.findById(req.params.id)
             .populate({ path: 'attendees.user', select: 'fullName collegeId section role' })
             .populate('organizers', 'fullName');
@@ -256,28 +255,19 @@ router.put('/workshop/:id/attendance', fetchUser, async (req, res) => {
     } catch (err) { res.status(500).send("Error"); }
 });
 
-// 🟢 FIX: Cascade Delete (Workshop -> Chat -> Messages)
+// Delete Workshop
 router.delete('/workshop/:id', fetchUser, async (req, res) => {
     try {
         const workshop = await Workshop.findById(req.params.id);
         if (!workshop) return res.status(404).send("Not Found");
 
-        // 1. Check permissions (Faculty or President)
-        // (You can add stricter checks here if needed)
-
-        // 2. Delete Associated Chat Logic
         if (workshop.chatGroupId) {
-            // Delete all messages in that chat
-            const Message = require('../models/Message'); // Ensure imported
+            const Message = require('../models/Message');
             await Message.deleteMany({ chat: workshop.chatGroupId });
-
-            // Delete the Chat Room itself
             await Chat.findByIdAndDelete(workshop.chatGroupId);
         }
 
-        // 3. Delete Workshop
         await Workshop.findByIdAndDelete(req.params.id);
-        
         res.json({ success: "Workshop and associated Chat deleted" });
     } catch (err) { 
         console.error(err);
@@ -296,7 +286,6 @@ router.get('/:id/posts', fetchUser, async (req, res) => {
 router.post('/:id/post', fetchUser, async (req, res) => {
     try {
         const { caption, link } = req.body;
-        // Simple media type check
         const getMediaType = (url) => (url.match(/\.(jpeg|jpg|gif|png)$/) != null || url.includes('cloudinary')) ? 'image' : 'video';
         
         const post = new ClubPost({
@@ -321,7 +310,6 @@ router.delete('/post/:id', fetchUser, async (req, res) => {
     } catch (err) { res.status(500).send("Server Error"); }
 });
 
-// Delete Club (Admin)
 router.delete('/delete/:id', fetchUser, async (req, res) => {
     try {
         if (req.user.role !== 'faculty') return res.status(403).send("Access Denied");
@@ -330,15 +318,10 @@ router.delete('/delete/:id', fetchUser, async (req, res) => {
     } catch (error) { res.status(500).send("Server Error"); }
 });
 
-// 🟢 NEW: Update Workshop Status (Live/Completed)
 router.put('/workshop/:id/status', fetchUser, async (req, res) => {
     try {
-        const { status } = req.body; // 'live' or 'completed'
+        const { status } = req.body;
         const workshop = await Workshop.findById(req.params.id);
-        
-        // Security: Only organizers/presidents/faculty should do this
-        // (You can add specific checks here if needed)
-
         workshop.status = status;
         await workshop.save();
         res.json(workshop);

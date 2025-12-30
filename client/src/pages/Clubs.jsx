@@ -134,14 +134,36 @@ export default function Clubs() {
         } catch (err) { alert("Failed to remove video."); }
     };
 
-    const handleAssignPresident = async (clubId, studentEmail) => {
-        try {
-            const token = localStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/api/clubs/assign-president`, { clubId, studentEmail }, { headers: { "auth-token": token } });
-            alert("👑 " + res.data.message);
-            window.location.reload();
-        } catch (err) { alert("Error: " + (err.response?.data?.message || "Failed")); }
-    };
+    // In client/src/pages/Clubs.jsx
+
+const handleAssignPresident = async () => {
+    // 1. Validation: Must have a user selected from the search bar
+    if (!selectedSearchUser) return alert("Please select a student first!");
+    
+    try {
+        const token = localStorage.getItem('token');
+        
+        // 2. API Call: Send 'studentId' (NOT email)
+        const res = await axios.post(`${API_URL}/api/clubs/assign-president`, { 
+            clubId: selectedClub._id, 
+            studentId: selectedSearchUser._id // 🟢 CRITICAL FIX
+        }, { headers: { "auth-token": token } });
+        
+        // 3. Success Feedback
+        alert(res.data.message);
+        
+        // 4. Close Modal & Refresh
+        setShowPresidentModal(false);
+        setSelectedSearchUser(null);
+        setSearchTerm("");
+        fetchClubs(); // Reload list to see the new President
+        
+    } catch (err) {
+        console.error(err);
+        // Show the actual error message from backend if available
+        alert("❌ " + (err.response?.data?.message || "Failed to assign President"));
+    }
+};
 
     const handleRemovePresident = async (clubId) => {
         if (!window.confirm("Vacate the President position?")) return;
@@ -325,11 +347,20 @@ export default function Clubs() {
                                                     </div>
                                                     {studentResults.length > 0 && (
                                                         <div className="mt-2 space-y-1 bg-black/60 rounded-lg border border-white/10 overflow-hidden">
-                                                            {studentResults.map(s => (
-                                                                <button key={s._id} onClick={() => handleAssignPresident(club._id, s.email)} className="w-full text-left p-3 hover:bg-purple-600 hover:text-white text-gray-300 text-sm flex items-center justify-between transition-colors border-b border-white/5">
-                                                                    <span>{s.fullName}</span><UserPlus size={14} className="opacity-50" />
-                                                                </button>
-                                                            ))}
+                                                            {/* Inside your Search Dropdown in Clubs.jsx */}
+{searchResults.map(user => (
+    <div 
+        key={user._id} 
+        onClick={() => {
+            setSelectedSearchUser(user); // 🟢 Creates the object used above
+            setSearchTerm(user.fullName);
+            setSearchResults([]); // Hide dropdown
+        }}
+        className="cursor-pointer p-2 hover:bg-white/10"
+    >
+        {user.fullName} ({user.email})
+    </div>
+))}
                                                         </div>
                                                     )}
                                                 </div>
