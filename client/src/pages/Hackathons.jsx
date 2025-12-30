@@ -5,7 +5,7 @@ import {
     Users, Rocket, Plus, X, Sword, Github, ExternalLink,
     Sliders, TrendingUp, Trash2, Calendar,
     CheckCircle, ChevronDown, Crown, Zap, UserMinus, Eye,
-    MessageSquare, UserCheck, XCircle, User, AlertTriangle
+    MessageSquare, UserCheck, XCircle, User, AlertTriangle, Lock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -123,7 +123,13 @@ export default function Hackathons() {
 
     const handleCreateSquad = async () => {
         if (!activeHack) return;
-        if (squadRoles.length === 0) return alert("Add at least one role you are looking for!");
+        const minRoles = (activeHack.teamSize?.min || 2) - 1;
+        
+        // 🟢 UI VALIDATION
+        if (squadRoles.length < minRoles) {
+            return alert(`Invalid Strategy: This hackathon requires a minimum squad size of ${activeHack.teamSize.min}. You must define at least ${minRoles} roles.`);
+        }
+
         try {
             const token = localStorage.getItem('token');
             await axios.post(`${API_URL}/api/hackathons/team/create`, {
@@ -135,6 +141,7 @@ export default function Hackathons() {
         } catch (err) { alert(err.response?.data?.message || "Failed"); }
     };
 
+    // APPLICATION FLOW
     const handleApply = async (teamId, role) => {
         if (!window.confirm(`Apply to join as ${role}?`)) return;
         try {
@@ -201,7 +208,6 @@ export default function Hackathons() {
             alert("🚀 Project Launched!");
             fetchTeams();
         } catch (err) { 
-            // 🟢 Show Real Error (e.g. Min Team Size)
             alert("❌ " + (err.response?.data?.message || "Submission Failed")); 
         }
     };
@@ -309,6 +315,7 @@ export default function Hackathons() {
                             const isMember = team.members.some(m => m.user._id === user._id);
                             const isLeader = team.leader._id === user._id;
                             const isFull = team.members.length >= (activeHack.teamSize?.max || 5);
+                            const isMinMet = team.members.length >= (activeHack.teamSize?.min || 2);
 
                             // 🟢 1. Create a copy of roles looking for
                             let remainingLookingFor = [...team.lookingFor];
@@ -349,8 +356,8 @@ export default function Hackathons() {
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-[10px] text-gray-500 uppercase font-bold">{m.role}</span>
                                                     
-                                                    {/* 🟢 COMPETITIVE APPLY */}
-                                                    {!userIsActive && isRegistrationOpen && !isFaculty && !isFull && !hasApplied && m.user._id !== user._id && (
+                                                    {/* 🟢 COMPETITIVE APPLY (Challenge) */}
+                                                    {!userIsActive && isRegistrationOpen && !isFaculty && !isFull && !hasApplied && m.user._id !== user._id && m.role !== 'Leader' && (
                                                         <button onClick={() => handleApply(team._id, m.role)} className="opacity-0 group-hover/member:opacity-100 text-[9px] bg-blue-600 hover:bg-blue-500 text-white px-1.5 py-0.5 rounded transition-all">
                                                             Challenge
                                                         </button>
@@ -408,9 +415,18 @@ export default function Hackathons() {
 
                                     {/* ACTIONS */}
                                     {isLeader && activeHack.status === 'live' && (
-                                        <button onClick={() => { setSelectedTeam(team); setShowLaunchpad(true); }} className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:opacity-90 transition-all shadow-lg flex items-center justify-center gap-2">
-                                            {team.project?.repoLink ? "Update Submission" : "Submit Project"} <Rocket size={14} />
-                                        </button>
+                                        <>
+                                            {/* 🟢 WARNING: Cannot submit if team too small */}
+                                            {!isMinMet ? (
+                                                <div className="w-full py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs font-bold flex items-center justify-center gap-2">
+                                                    <AlertTriangle size={14} /> Need {activeHack.teamSize.min - team.members.length} More Member(s)
+                                                </div>
+                                            ) : (
+                                                <button onClick={() => { setSelectedTeam(team); setShowLaunchpad(true); }} className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:opacity-90 transition-all shadow-lg flex items-center justify-center gap-2">
+                                                    {team.project?.repoLink ? "Update Submission" : "Submit Project"} <Rocket size={14} />
+                                                </button>
+                                            )}
+                                        </>
                                     )}
                                     {isFaculty && team.project?.repoLink && (
                                         <div className="grid grid-cols-2 gap-2 mt-2">
@@ -425,34 +441,9 @@ export default function Hackathons() {
                 </div>
             )}
 
-            {/* --- PODIUM TAB --- */}
-            {activeTab === 'grid' && activeHack && (
-                <div className="max-w-5xl mx-auto relative z-10">
-                    <div className="space-y-4 pt-10">
-                        {teams.map((team, index) => (
-                            <div key={team._id} className="bg-[#121214] border border-white/5 rounded-xl p-6 group hover:border-white/10 transition-all">
-                                <div className="flex justify-between items-center">
-                                    <div className="flex items-center gap-4">
-                                        <div className="text-2xl font-mono font-bold text-gray-600">#{index + 1}</div>
-                                        <div>
-                                            <h3 className="text-lg font-bold text-white">{team.name}</h3>
-                                            <p className="text-xs text-gray-500">{team.project?.title || "No Project Submitted"}</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-2xl font-bold text-white font-mono">{team.scores.totalScore}</div>
-                                        <div className="text-[10px] text-gray-500 uppercase tracking-widest">Points</div>
-                                    </div>
-                                </div>
-                                {isFaculty && <FacultyGrader team={team} onPostScore={handlePostScore} />}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* --- MODALS --- */}
-
+            {/* ... Keep all existing Modals exactly as they were ... */}
+            {/* The Modals section is unchanged from previous version, just ensure they are included */}
+            
             {viewApplicants && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#18181b] border border-white/10 p-6 rounded-2xl w-full max-w-sm relative shadow-2xl">
@@ -483,7 +474,6 @@ export default function Hackathons() {
                         <div className="space-y-4">
                             <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Squad Name" value={newSquadName} onChange={e => setNewSquadName(e.target.value)} />
                             
-                            {/* 🟢 STRATEGY LIMIT INFO */}
                             <div className="flex justify-between text-xs text-gray-500 font-bold uppercase tracking-wider">
                                 <span>Define Roles</span>
                                 <span>{squadRoles.length} / {(activeHack?.teamSize?.max || 5) - 1} slots</span>
@@ -504,6 +494,7 @@ export default function Hackathons() {
                 </div>
             )}
 
+            {/* Launchpad, CreateHack, ManageEvent modals remain unchanged... */}
             {showLaunchpad && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#18181b] border border-white/10 p-8 rounded-3xl w-full max-w-lg relative shadow-2xl">
@@ -520,7 +511,6 @@ export default function Hackathons() {
                 </div>
             )}
 
-            {/* CREATE EVENT MODAL */}
             {showCreateHack && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#18181b] border border-white/10 p-8 rounded-3xl w-full max-w-md relative">
