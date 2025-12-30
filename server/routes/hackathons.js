@@ -17,13 +17,15 @@ router.get('/fetchall', fetchUser, async (req, res) => {
     } catch (error) { res.status(500).send("Server Error"); }
 });
 
-// Create Event
+// Create Event (With "Safe" Announcement)
 router.post('/create', fetchUser, async (req, res) => {
     try {
+        // 1. Check Role
         if (req.user.role !== 'faculty') return res.status(403).json({ message: "Access Denied" });
 
         const { title, description, date, location, image, minTeamSize, maxTeamSize } = req.body;
 
+        // 2. Create Hackathon Object
         const newHack = new Hackathon({
             title, description, date, location, image,
             organizer: req.user.id,
@@ -34,18 +36,29 @@ router.post('/create', fetchUser, async (req, res) => {
             status: 'upcoming'
         });
 
+        // 3. Save Hackathon (CRITICAL STEP)
         const savedHack = await newHack.save();
 
-        await new Announcement({
-            message: `⚔️ NEW BATTLE: ${title} announced! Form squads of ${newHack.teamSize.min}-${newHack.teamSize.max}.`,
-            type: 'hackathon',
-            relatedId: savedHack._id
-        }).save();
+        // 4. Try to Announce (SAFE BLOCK)
+        // If this fails, it won't crash the response
+        try {
+            await new Announcement({
+                message: `⚔️ NEW BATTLE: ${title} announced! Form squads of ${newHack.teamSize.min}-${newHack.teamSize.max}.`,
+                type: 'hackathon',
+                // We use both ID fields to be safe (DB will just ignore the extra one)
+                relatedId: savedHack._id, 
+                relatedHackathonId: savedHack._id 
+            }).save();
+        } catch (announcementError) {
+            console.log("⚠️ Auto-Announcement failed (but Hackathon created):", announcementError.message);
+        }
 
-        res.status(200).json(savedHack);
+        // 5. Send Success Response
+        res.status(200).json(savedHack); 
+
     } catch (error) { 
         console.error("Create Hackathon Error:", error);
-        res.status(500).send("Server Error"); 
+        res.status(500).json({ error: error.message || "Server Error" }); 
     }
 });
 
@@ -53,6 +66,7 @@ router.post('/create', fetchUser, async (req, res) => {
 // 2. SQUAD FORGE (Team Management)
 // ==========================================
 
+// Get Teams
 router.get('/:id/teams', fetchUser, async (req, res) => {
     try {
         const teams = await HackathonTeam.find({ hackathonId: req.params.id })
@@ -64,22 +78,20 @@ router.get('/:id/teams', fetchUser, async (req, res) => {
     } catch (error) { res.status(500).send("Server Error"); }
 });
 
-// 🟢 CREATE SQUAD (Enforce Max Roles Strategy)
+// Create Squad (With Strategy Limit Check)
 router.post('/team/create', fetchUser, async (req, res) => {
     try {
         const { hackathonId, name, lookingFor } = req.body;
 
-        // 1. Check if user already has a team
+        // Check if user already has a team
         const existing = await HackathonTeam.findOne({ hackathonId, 'members.user': req.user.id });
         if (existing) return res.status(400).json({ message: "You are already in a squad!" });
 
-        // 2. 🟢 STRATEGY CHECK: Fetch Hackathon Limits
+        // Strategy Check: Limit Roles
         const hackathon = await Hackathon.findById(hackathonId);
         if (!hackathon) return res.status(404).json({ message: "Event not found" });
 
-        // Leader takes 1 spot, so allowed roles = Max - 1
         const maxRolesAllowed = hackathon.teamSize.max - 1;
-
         if (lookingFor.length > maxRolesAllowed) {
             return res.status(400).json({ 
                 message: `Strategy Error: You can only recruit ${maxRolesAllowed} allies for this mission.` 
@@ -170,18 +182,14 @@ router.put('/team/reject/:teamId', fetchUser, async (req, res) => {
 // 4. SUBMISSION & GRADING
 // ==========================================
 
-// 🟢 SUBMIT PROJECT (Enforce Min Team Size)
 router.post('/team/submit/:teamId', fetchUser, async (req, res) => {
     try {
         const { title, repoLink, liveLink, description } = req.body;
         const team = await HackathonTeam.findById(req.params.teamId);
-        
-        // 1. Fetch Hackathon Rules
         const hackathon = await Hackathon.findById(team.hackathonId);
 
         if (team.leader.toString() !== req.user.id) return res.status(401).send("Leader Only");
 
-        // 2. 🟢 MINIMUM SIZE CHECK
         if (team.members.length < hackathon.teamSize.min) {
             return res.status(400).json({ 
                 message: `Submission Failed: You need at least ${hackathon.teamSize.min} members to enter the arena.` 
@@ -243,7 +251,12 @@ router.delete('/:id', fetchUser, async (req, res) => {
         }
 
         await Hackathon.findByIdAndDelete(req.params.id);
-        await Announcement.deleteMany({ relatedHackathonId: req.params.id });
+        
+        // Safe delete for announcements (ignore error if field mismatch)
+        try {
+            await Announcement.deleteMany({ relatedHackathonId: req.params.id });
+        } catch (e) { console.log("Announcement cleanup skipped"); }
+
         res.json({ success: "Hackathon deleted" });
     } catch (error) { res.status(500).send("Server Error"); }
 });
