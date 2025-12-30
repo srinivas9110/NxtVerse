@@ -8,12 +8,15 @@ const HackathonSchema = new mongoose.Schema({
     location: { type: String, default: "Campus Auditorium" },
     image: { type: String, default: "https://images.unsplash.com/photo-1504384308090-c54be3855833?auto=format&fit=crop&q=80" },
 
+    // 🟢 NEW: Guidelines Link (For the Rulebook feature)
+    guidelinesLink: { type: String, default: "" },
+
     // ⚔️ CONNECTED TEAMS
     teams: [{ type: mongoose.Schema.Types.ObjectId, ref: 'HackathonTeam' }],
 
-    // 🆕 TEAM CONSTRAINTS (New Feature)
+    // 🆕 TEAM CONSTRAINTS
     teamSize: {
-        min: { type: Number, default: 2 }, // e.g., 1 for Solo allowed
+        min: { type: Number, default: 2 },
         max: { type: Number, default: 5 }
     },
 
@@ -27,7 +30,9 @@ const HackathonSchema = new mongoose.Schema({
     // Status
     status: { type: String, enum: ['upcoming', 'live', 'judging', 'completed'], default: 'upcoming' },
 
-    organizer: { type: String, required: true }, // Faculty Name/ID
+    // 🟢 FIX: Changed to ObjectId for secure permission checks
+    organizer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    
     createdAt: { type: Date, default: Date.now }
 });
 

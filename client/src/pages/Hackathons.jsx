@@ -5,7 +5,7 @@ import {
     Users, Rocket, Plus, X, Sword, Github, ExternalLink,
     Sliders, TrendingUp, Trash2, Calendar,
     CheckCircle, ChevronDown, Crown, Zap, UserMinus, Eye,
-    MessageSquare, UserCheck, XCircle, User, AlertTriangle, Lock
+    MessageSquare, UserCheck, XCircle, User, AlertTriangle, FileText
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -67,7 +67,7 @@ export default function Hackathons() {
     const [currentRoleInput, setCurrentRoleInput] = useState("");
     const [submission, setSubmission] = useState({ title: '', repoLink: '', liveLink: '', description: '' });
     const [selectedTeam, setSelectedTeam] = useState(null);
-    const [newEvent, setNewEvent] = useState({ title: '', date: '', description: '', minTeamSize: 2, maxTeamSize: 5 });
+    const [newEvent, setNewEvent] = useState({ title: '', date: '', description: '', minTeamSize: 2, maxTeamSize: 5, guidelinesLink: '' });
 
     // 1. INIT
     useEffect(() => {
@@ -107,7 +107,6 @@ export default function Hackathons() {
     // Helpers
     const addRoleTag = () => { 
         if (currentRoleInput.trim()) { 
-            // 🟢 VALIDATION: Check Role Limit
             const maxRoles = (activeHack?.teamSize?.max || 5) - 1;
             if (squadRoles.length >= maxRoles) {
                 alert(`Strategy Limit Reached: You can only recruit ${maxRoles} allies.`);
@@ -124,12 +123,9 @@ export default function Hackathons() {
     const handleCreateSquad = async () => {
         if (!activeHack) return;
         const minRoles = (activeHack.teamSize?.min || 2) - 1;
-        
-        // 🟢 UI VALIDATION
         if (squadRoles.length < minRoles) {
             return alert(`Invalid Strategy: This hackathon requires a minimum squad size of ${activeHack.teamSize.min}. You must define at least ${minRoles} roles.`);
         }
-
         try {
             const token = localStorage.getItem('token');
             await axios.post(`${API_URL}/api/hackathons/team/create`, {
@@ -141,7 +137,6 @@ export default function Hackathons() {
         } catch (err) { alert(err.response?.data?.message || "Failed"); }
     };
 
-    // APPLICATION FLOW
     const handleApply = async (teamId, role) => {
         if (!window.confirm(`Apply to join as ${role}?`)) return;
         try {
@@ -179,6 +174,19 @@ export default function Hackathons() {
             await axios.put(`${API_URL}/api/hackathons/team/removeMember/${teamId}`, { memberId }, { headers: { "auth-token": token } });
             fetchTeams();
         } catch (err) { alert(err.response?.data?.message || "Failed"); }
+    };
+
+    // 🟢 NEW: DELETE SQUAD ACTION
+    const handleDeleteSquad = async (teamId) => {
+        if (!window.confirm("⚠️ DISBAND SQUAD? This action cannot be undone.")) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`${API_URL}/api/hackathons/team/${teamId}`, { headers: { "auth-token": token } });
+            alert("✅ Squad Disbanded.");
+            fetchTeams();
+        } catch (err) { 
+            alert("❌ " + (err.response?.data?.message || "Failed to delete")); 
+        }
     };
 
     const handleUpdateStatus = async (status) => {
@@ -228,7 +236,7 @@ export default function Hackathons() {
             setHackathons(prev => [res.data, ...prev]);
             setActiveHack(res.data);
             setShowCreateHack(false);
-            setNewEvent({ title: '', date: '', description: '', minTeamSize: 2, maxTeamSize: 5 });
+            setNewEvent({ title: '', date: '', description: '', minTeamSize: 2, maxTeamSize: 5, guidelinesLink: '' });
             alert("✅ Event Published Successfully!");
         } catch (err) { 
             console.error(err);
@@ -262,9 +270,17 @@ export default function Hackathons() {
                 </div>
                 <div className="flex items-center gap-3">
                     {activeHack && (
-                        <div className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 border ${activeHack.status === 'live' ? 'bg-red-500/10 text-red-500 border-red-500/20 animate-pulse' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'}`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${activeHack.status === 'live' ? 'bg-red-500' : 'bg-blue-500'}`}></div>{activeHack.status}
-                        </div>
+                        <>
+                            {/* 🟢 NEW: GUIDELINES BUTTON */}
+                            {activeHack.guidelinesLink && (
+                                <a href={activeHack.guidelinesLink} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 bg-white/5 text-gray-300 hover:bg-white/10 border border-white/5 transition-all">
+                                    <FileText size={14} /> Rulebook
+                                </a>
+                            )}
+                            <div className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 border ${activeHack.status === 'live' ? 'bg-red-500/10 text-red-500 border-red-500/20 animate-pulse' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'}`}>
+                                <div className={`w-1.5 h-1.5 rounded-full ${activeHack.status === 'live' ? 'bg-red-500' : 'bg-blue-500'}`}></div>{activeHack.status}
+                            </div>
+                        </>
                     )}
                     <div className="relative">
                         <button onClick={() => setShowDropdown(!showDropdown)} className="flex items-center gap-3 bg-[#121214] border border-white/10 rounded-xl px-4 py-2.5 min-w-[200px] text-sm font-bold text-white hover:bg-[#18181b] transition-all">
@@ -317,7 +333,6 @@ export default function Hackathons() {
                             const isFull = team.members.length >= (activeHack.teamSize?.max || 5);
                             const isMinMet = team.members.length >= (activeHack.teamSize?.min || 2);
 
-                            // 🟢 1. Create a copy of roles looking for
                             let remainingLookingFor = [...team.lookingFor];
 
                             return (
@@ -329,15 +344,23 @@ export default function Hackathons() {
                                             <h3 className="text-xl font-black text-white mb-1 group-hover:text-purple-400 transition-colors">{team.name}</h3>
                                             <p className="text-xs text-gray-500 font-bold flex items-center gap-1"><Crown size={12} className="text-yellow-500" /> {team.leader.fullName}</p>
                                         </div>
-                                        <div className="bg-white/5 px-2 py-1 rounded text-[10px] font-bold text-gray-400 border border-white/5">
-                                            {team.members.length}/{activeHack.teamSize?.max}
+                                        {/* 🟢 NEW: DISBAND BUTTON (Top Right of Card) */}
+                                        <div className="flex flex-col items-end gap-1">
+                                            <div className="bg-white/5 px-2 py-1 rounded text-[10px] font-bold text-gray-400 border border-white/5">
+                                                {team.members.length}/{activeHack.teamSize?.max}
+                                            </div>
+                                            {/* Show if Faculty OR (Leader AND Event is Upcoming) */}
+                                            { (isFaculty || (isLeader && activeHack.status === 'upcoming')) && (
+                                                <button onClick={() => handleDeleteSquad(team._id)} className="text-[10px] text-red-500 hover:text-red-400 font-bold flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Trash2 size={10} /> Disband
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
 
                                     {/* Members List */}
                                     <div className="space-y-2 mb-6 flex-1">
                                         {team.members.map((m, idx) => {
-                                            // 🟢 2. Remove role from list if filled
                                             const filledRoleIndex = remainingLookingFor.findIndex(r => r.toLowerCase() === m.role.toLowerCase());
                                             if (filledRoleIndex !== -1) {
                                                  remainingLookingFor.splice(filledRoleIndex, 1);
@@ -356,21 +379,18 @@ export default function Hackathons() {
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-[10px] text-gray-500 uppercase font-bold">{m.role}</span>
                                                     
-                                                    {/* 🟢 COMPETITIVE APPLY (Challenge) */}
                                                     {!userIsActive && isRegistrationOpen && !isFaculty && !isFull && !hasApplied && m.user._id !== user._id && m.role !== 'Leader' && (
                                                         <button onClick={() => handleApply(team._id, m.role)} className="opacity-0 group-hover/member:opacity-100 text-[9px] bg-blue-600 hover:bg-blue-500 text-white px-1.5 py-0.5 rounded transition-all">
                                                             Challenge
                                                         </button>
                                                     )}
 
-                                                    {/* VIEW WAITLIST */}
                                                     {isLeader && applicantCount > 0 && (
                                                         <button onClick={() => setViewApplicants({ teamId: team._id, role: m.role, applicants: roleApplicants })} className="flex items-center gap-1 text-[10px] font-bold bg-blue-500/20 text-blue-400 px-2 py-1 rounded hover:bg-blue-500 hover:text-white transition-all">
                                                             <User size={12} /> {applicantCount}
                                                         </button>
                                                     )}
 
-                                                    {/* REMOVE */}
                                                     {isLeader && m.user._id !== user._id && (
                                                         <button onClick={() => handleRemoveMember(team._id, m.user._id)} className="opacity-0 group-hover/member:opacity-100 text-red-500 hover:bg-red-500/10 p-1 rounded transition-all">
                                                             <UserMinus size={12} />
@@ -380,7 +400,7 @@ export default function Hackathons() {
                                             </div>
                                         )})}
 
-                                        {/* 🟢 3. Open Roles */}
+                                        {/* Open Roles */}
                                         {remainingLookingFor.map((role, idx) => {
                                             const roleApplicants = team.requests?.filter(r => r.role === role);
                                             const hasApplied = roleApplicants?.some(r => r.user._id === user._id);
@@ -416,7 +436,6 @@ export default function Hackathons() {
                                     {/* ACTIONS */}
                                     {isLeader && activeHack.status === 'live' && (
                                         <>
-                                            {/* 🟢 WARNING: Cannot submit if team too small */}
                                             {!isMinMet ? (
                                                 <div className="w-full py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs font-bold flex items-center justify-center gap-2">
                                                     <AlertTriangle size={14} /> Need {activeHack.teamSize.min - team.members.length} More Member(s)
@@ -441,9 +460,30 @@ export default function Hackathons() {
                 </div>
             )}
 
-            {/* ... Keep all existing Modals exactly as they were ... */}
-            {/* The Modals section is unchanged from previous version, just ensure they are included */}
-            
+            {/* CREATE EVENT MODAL - UPDATED */}
+            {showCreateHack && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-[#18181b] border border-white/10 p-8 rounded-3xl w-full max-w-md relative">
+                        <button onClick={() => setShowCreateHack(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
+                        <h2 className="text-xl font-bold mb-4">Create Event</h2>
+                        <div className="space-y-3">
+                            <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Event Title" onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} />
+                            <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Date string" onChange={e => setNewEvent({ ...newEvent, date: e.target.value })} />
+                            <div className="flex gap-2">
+                                <input type="number" min="1" className="w-1/2 bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Min Size" onChange={e => setNewEvent({ ...newEvent, minTeamSize: e.target.value })} />
+                                <input type="number" min="1" className="w-1/2 bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Max Size" onChange={e => setNewEvent({ ...newEvent, maxTeamSize: e.target.value })} />
+                            </div>
+                            {/* 🟢 NEW: GUIDELINES INPUT */}
+                            <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Rulebook/Doc Link (Optional)" onChange={e => setNewEvent({ ...newEvent, guidelinesLink: e.target.value })} />
+                            
+                            <textarea className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" rows="3" placeholder="Description" onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} />
+                            <button onClick={handleCreateHackathon} className="w-full bg-white text-black font-bold py-3 rounded-xl mt-2">Publish Event</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Other modals (CreateSquad, Launchpad, ManageEvent, Applicants) remain unchanged */}
             {viewApplicants && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#18181b] border border-white/10 p-6 rounded-2xl w-full max-w-sm relative shadow-2xl">
@@ -494,7 +534,6 @@ export default function Hackathons() {
                 </div>
             )}
 
-            {/* Launchpad, CreateHack, ManageEvent modals remain unchanged... */}
             {showLaunchpad && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#18181b] border border-white/10 p-8 rounded-3xl w-full max-w-lg relative shadow-2xl">
@@ -506,25 +545,6 @@ export default function Hackathons() {
                             <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Live Demo URL (Optional)" onChange={e => setSubmission({ ...submission, liveLink: e.target.value })} />
                             <textarea className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" rows="3" placeholder="Short Description..." onChange={e => setSubmission({ ...submission, description: e.target.value })} />
                             <button onClick={handleSubmitProject} className="w-full bg-gradient-to-r from-purple-600 to-blue-600 py-3 rounded-xl font-bold text-white mt-2 shadow-lg">🚀 Launch Project</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {showCreateHack && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-[#18181b] border border-white/10 p-8 rounded-3xl w-full max-w-md relative">
-                        <button onClick={() => setShowCreateHack(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
-                        <h2 className="text-xl font-bold mb-4">Create Event</h2>
-                        <div className="space-y-3">
-                            <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Event Title" onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} />
-                            <input className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Date string" onChange={e => setNewEvent({ ...newEvent, date: e.target.value })} />
-                            <div className="flex gap-2">
-                                <input type="number" min="1" className="w-1/2 bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Min Size" onChange={e => setNewEvent({ ...newEvent, minTeamSize: e.target.value })} />
-                                <input type="number" min="1" className="w-1/2 bg-black/40 border border-white/10 p-3 rounded-xl text-white" placeholder="Max Size" onChange={e => setNewEvent({ ...newEvent, maxTeamSize: e.target.value })} />
-                            </div>
-                            <textarea className="w-full bg-black/40 border border-white/10 p-3 rounded-xl text-white" rows="3" placeholder="Description" onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} />
-                            <button onClick={handleCreateHackathon} className="w-full bg-white text-black font-bold py-3 rounded-xl mt-2">Publish Event</button>
                         </div>
                     </div>
                 </div>

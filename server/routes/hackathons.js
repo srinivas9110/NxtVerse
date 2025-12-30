@@ -22,10 +22,11 @@ router.post('/create', fetchUser, async (req, res) => {
     try {
         if (req.user.role !== 'faculty') return res.status(403).json({ message: "Access Denied" });
 
-        const { title, description, date, location, image, minTeamSize, maxTeamSize } = req.body;
+        const { title, description, date, location, image, minTeamSize, maxTeamSize, guidelinesLink } = req.body;
 
         const newHack = new Hackathon({
             title, description, date, location, image,
+            guidelinesLink, // 🟢 Save Link
             organizer: req.user.id,
             teamSize: {
                 min: parseInt(minTeamSize) || 2,
@@ -53,7 +54,7 @@ router.post('/create', fetchUser, async (req, res) => {
 });
 
 // ==========================================
-// 2. SQUAD FORGE (Team Management)
+// 2. SQUAD FORGE
 // ==========================================
 
 router.get('/:id/teams', fetchUser, async (req, res) => {
@@ -67,34 +68,20 @@ router.get('/:id/teams', fetchUser, async (req, res) => {
     } catch (error) { res.status(500).send("Server Error"); }
 });
 
-// 🟢 CREATE SQUAD (STRICT RULES)
 router.post('/team/create', fetchUser, async (req, res) => {
     try {
         const { hackathonId, name, lookingFor } = req.body;
 
-        // 1. Check if user already has a team
         const existing = await HackathonTeam.findOne({ hackathonId, 'members.user': req.user.id });
         if (existing) return res.status(400).json({ message: "You are already in a squad!" });
 
-        // 2. Fetch Hackathon Rules
         const hackathon = await Hackathon.findById(hackathonId);
         if (!hackathon) return res.status(404).json({ message: "Event not found" });
 
-        const minSize = hackathon.teamSize.min;
-        const maxSize = hackathon.teamSize.max;
-
-        // 🟢 RULE 1: Minimum Viable Squad Check
-        // Potential Size = 1 (Leader) + lookingFor.length
-        if ((1 + lookingFor.length) < minSize) {
+        const maxRolesAllowed = hackathon.teamSize.max - 1;
+        if (lookingFor.length > maxRolesAllowed) {
             return res.status(400).json({ 
-                message: `Invalid Strategy: This hackathon requires at least ${minSize} members. You need to define at least ${minSize - 1} roles.` 
-            });
-        }
-
-        // 🟢 RULE 2: Maximum Limit Check
-        if ((1 + lookingFor.length) > maxSize) {
-            return res.status(400).json({ 
-                message: `Overcrowded: Max squad size is ${maxSize}. You can only define ${maxSize - 1} roles.` 
+                message: `Strategy Error: You can only recruit ${maxRolesAllowed} allies for this mission.` 
             });
         }
 
@@ -160,10 +147,7 @@ router.put('/team/accept/:teamId', fetchUser, async (req, res) => {
         );
 
         res.json({ success: true, message: "New Member Recruited!" });
-    } catch (error) {
-        console.error(error);
-        res.status(500).send("Server Error");
-    }
+    } catch (error) { res.status(500).send("Server Error"); }
 });
 
 router.put('/team/reject/:teamId', fetchUser, async (req, res) => {
@@ -182,7 +166,6 @@ router.put('/team/reject/:teamId', fetchUser, async (req, res) => {
 // 4. SUBMISSION & GRADING
 // ==========================================
 
-// 🟢 SUBMIT PROJECT (STRICT CHECK)
 router.post('/team/submit/:teamId', fetchUser, async (req, res) => {
     try {
         const { title, repoLink, liveLink, description } = req.body;
@@ -191,10 +174,9 @@ router.post('/team/submit/:teamId', fetchUser, async (req, res) => {
 
         if (team.leader.toString() !== req.user.id) return res.status(401).send("Leader Only");
 
-        // 🟢 STRICT RULE: Minimum Team Size
         if (team.members.length < hackathon.teamSize.min) {
             return res.status(400).json({ 
-                message: `Submission Failed: Your squad is understrength. You need at least ${hackathon.teamSize.min} members to enter.` 
+                message: `Submission Failed: Your squad is understrength. You need at least ${hackathon.teamSize.min} members to enter the arena.` 
             });
         }
 
@@ -221,18 +203,40 @@ router.post('/team/score/:teamId', fetchUser, async (req, res) => {
 });
 
 // ==========================================
-// 5. HOUSEKEEPING
+// 5. HOUSEKEEPING (DELETE SQUAD)
 // ==========================================
 
+// 🟢 DELETE SQUAD (Disband)
 router.delete('/team/:teamId', fetchUser, async (req, res) => {
     try {
         const team = await HackathonTeam.findById(req.params.teamId);
-        if (team.leader.toString() !== req.user.id && req.user.role !== 'faculty') return res.status(401).send("Denied");
+        if (!team) return res.status(404).send("Team Not Found");
+
+        const hackathon = await Hackathon.findById(team.hackathonId);
+        const isLeader = team.leader.toString() === req.user.id;
+        const isFaculty = req.user.role === 'faculty';
+
+        // 🟢 Permission Check
+        if (!isLeader && !isFaculty) return res.status(403).json({ message: "Access Denied" });
+
+        // 🟢 Status Logic Check
+        // 1. Leader can ONLY delete if UPCOMING
+        if (isLeader && !isFaculty && hackathon.status !== 'upcoming') {
+            return res.status(400).json({ message: "Battle has started! You cannot disband your squad now." });
+        }
+        // 2. Faculty can delete if UPCOMING or LIVE (Disqualification)
+        if (isFaculty && hackathon.status === 'completed') {
+            return res.status(400).json({ message: "Event completed. History cannot be erased." });
+        }
 
         await HackathonTeam.findByIdAndDelete(req.params.teamId);
         await Hackathon.findByIdAndUpdate(team.hackathonId, { $pull: { teams: req.params.teamId } });
-        res.json({ success: true });
-    } catch (error) { res.status(500).send("Server Error"); }
+        
+        res.json({ success: true, message: "Squad Disbanded" });
+    } catch (error) { 
+        console.error(error);
+        res.status(500).send("Server Error"); 
+    }
 });
 
 router.put('/:id/status', fetchUser, async (req, res) => {
