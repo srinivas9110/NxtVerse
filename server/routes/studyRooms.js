@@ -139,26 +139,31 @@ router.post('/invite', fetchUser, async (req, res) => {
         const { targetUserId, podId } = req.body;
         const hostId = req.user.id;
 
-        // 1. Get Host Name
         const host = await User.findById(hostId);
-        
-        // 2. Get Pod Name
         const pod = await StudyRoom.findById(podId);
         if (!pod) return res.status(404).json({ error: "Pod not found" });
 
-        // 3. Create Notification Object
+        // 🟢 Create a Smart Notification Object
         const notification = {
-            type: 'pod_invite',
-            message: `${host.fullName} invited you to join '${pod.name}'`,
-            data: { podId: pod._id, roomId: pod.roomId }, // Data needed to join
-            timestamp: new Date(),
-            read: false
+            type: 'pod_invite', // This separates it from connection requests
+            senderName: host.fullName, // Explicitly send name for the UI
+            senderId: host._id,
+            message: `Invited you to join '${pod.name}'`,
+            data: { 
+                podId: pod._id, 
+                roomId: pod.roomId,
+                isPrivate: pod.isPrivate,
+                passcode: pod.passcode // 🤫 Send key so they don't need to type it
+            },
+            timestamp: new Date()
         };
 
-        // 4. Push to Target User's Notification Array
-        // (Note: We assume your User model has a 'notifications' array. If not, this might fail quietly or need schema update)
+        // Push to Target User's Notification/Requests array
+        // Note: We interpret 'requestsReceived' broadly here to include invites
+        // Or better, use a 'notifications' array if your User model has it. 
+        // For now, assuming you might want to mix them or have a notifications field:
         await User.findByIdAndUpdate(targetUserId, {
-            $push: { notifications: notification }
+            $push: { requestsReceived: notification } // Or $push: { notifications: notification } if you separate them
         });
 
         res.json({ success: "Invitation sent" });

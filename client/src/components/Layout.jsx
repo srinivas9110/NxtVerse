@@ -242,31 +242,69 @@ export default function Layout() {
                         </div>
 
                         {/* NOTIFICATIONS WIDGET */}
-                        <div className="relative" ref={notifRef}>
-                            <button onClick={() => { setShowNotifications(!showNotifications); setShowCalendar(false); }} className={`p-2 rounded-full transition-all relative ${showNotifications ? 'text-purple-400 bg-purple-500/10' : 'text-gray-400 hover:text-white'}`}>
-                                <Bell size={20} />
-                                {requests.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />}
-                            </button>
-                            {showNotifications && (
-                                <div className="absolute right-0 mt-4 w-80 bg-[#121214] border border-white/10 rounded-2xl shadow-2xl p-4 z-50">
-                                    <h3 className="font-bold text-sm mb-3">Signals</h3>
-                                    <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2">
-                                        {requests.length === 0 ? <p className="text-xs text-gray-500 text-center py-4">No pending signals.</p> : requests.map(r => (
-                                            <div key={r._id} className="p-3 rounded-xl bg-white/5 flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white">{r.fullName[0]}</div>
-                                                    <div><p className="text-xs font-bold text-white">{r.fullName}</p><p className="text-[10px] text-gray-500">Requesting connection</p></div>
-                                                </div>
-                                                <div className="flex gap-1">
-                                                    <button onClick={() => handleAccept(r._id)} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-black"><Check size={14} /></button>
-                                                    <button onClick={() => handleReject(r._id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><X size={14} /></button>
-                                                </div>
-                                            </div>
-                                        ))}
+<div className="relative" ref={notifRef}>
+    <button onClick={() => { setShowNotifications(!showNotifications); setShowCalendar(false); }} className={`p-2 rounded-full transition-all relative ${showNotifications ? 'text-purple-400 bg-purple-500/10' : 'text-gray-400 hover:text-white'}`}>
+        <Bell size={20} />
+        {requests.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />}
+    </button>
+    
+    {showNotifications && (
+        <div className="absolute right-0 mt-4 w-80 bg-[#121214] border border-white/10 rounded-2xl shadow-2xl p-4 z-50">
+            <h3 className="font-bold text-sm mb-3">Signals</h3>
+            <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2">
+                {requests.length === 0 ? <p className="text-xs text-gray-500 text-center py-4">No pending signals.</p> : requests.map((r, index) => (
+                    <div key={r._id || index} className="p-3 rounded-xl bg-white/5 flex items-center justify-between">
+                        
+                        {/* 🟢 CASE 1: POD INVITE */}
+                        {r.type === 'pod_invite' ? (
+                            <div className="w-full">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold text-white">
+                                        {r.senderName ? r.senderName[0] : 'P'}
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-white">{r.senderName}</p>
+                                        <p className="text-[10px] text-gray-500">{r.message}</p>
                                     </div>
                                 </div>
-                            )}
-                        </div>
+                                <button 
+                                    onClick={() => {
+                                        setShowNotifications(false);
+                                        // 🚀 Navigate with Data to Auto-Join
+                                        navigate('/study-rooms', { 
+                                            state: { autoJoin: true, podData: r.data } 
+                                        });
+                                        // Optional: Add logic here to delete notification after clicking
+                                    }}
+                                    className="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-all"
+                                >
+                                    <Rocket size={12} /> Join Pod Now
+                                </button>
+                            </div>
+                        ) : (
+                            /* 🟢 CASE 2: CONNECTION REQUEST (Existing Logic) */
+                            <>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white">
+                                        {r.fullName ? r.fullName[0] : 'U'}
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-white">{r.fullName}</p>
+                                        <p className="text-[10px] text-gray-500">Requesting connection</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-1">
+                                    <button onClick={() => handleAccept(r._id)} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-black"><Check size={14} /></button>
+                                    <button onClick={() => handleReject(r._id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><X size={14} /></button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    )}
+</div>
 
                         {/* PROFILE LINK */}
                         <Link to="/profile" className="flex items-center gap-3 pl-4 border-l border-white/10">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
 import axios from 'axios';
+import { useNavigate, useLocation } from 'react-router-dom'; // 🟢 Add useLocation
 import { JitsiMeeting } from '@jitsi/react-sdk';
 import {
     Zap, Users, Clock, Plus, X, Monitor,
@@ -64,6 +65,8 @@ export default function StudyRooms() {
         name: '', subject: '', maxParticipants: 5, duration: '1 hour',
         isPrivate: false, passcode: ''
     });
+
+    const location = useLocation();
 
     const audioRef = useRef(new Audio(LOFI_STREAM_URL));
 
@@ -143,6 +146,47 @@ export default function StudyRooms() {
         }
         setIsRadioPlaying(!isRadioPlaying);
     };
+
+    // 🟢 AUTO-JOIN LOGIC (Run when landing from Invite)
+    useEffect(() => {
+        if (location.state?.autoJoin && location.state?.podData && !activePod) {
+            const { podData } = location.state;
+            
+            // 1. Optimistic UI Set
+            setActivePod({
+                _id: podData.podId,
+                roomId: podData.roomId,
+                name: "Invited Session",
+                maxParticipants: 10,
+                creatorId: "unknown",
+                isPrivate: podData.isPrivate,
+                // We inject the passcode here so we don't need to ask for it
+                passcode: podData.passcode 
+            });
+
+            // 2. Set Session Defaults
+            setEditLimit(10);
+            setIsTimerRunning(true);
+            setSessionGoal("Joined via Invite 🚀"); 
+            setMeetingLoaded(false);
+
+            // 3. Persist so reload works
+            localStorage.setItem('activePodId', podData.podId);
+            localStorage.setItem('activePodGoal', "Joined via Invite 🚀");
+
+            // 4. Backend Handshake (Add user to active list)
+            const joinBackend = async () => {
+                const token = localStorage.getItem('token');
+                try {
+                    await axios.put(`${API_URL}/api/studyrooms/join/${podData.podId}`, {}, { headers: { "auth-token": token } });
+                } catch (e) { console.error("Auto-join API failed", e); }
+            };
+            joinBackend();
+
+            // 5. Clean URL state
+            window.history.replaceState({}, document.title);
+        }
+    }, [location, activePod]);
 
     // 3. Room Actions
     const handleCreateRoom = async () => {
