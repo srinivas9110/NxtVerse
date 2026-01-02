@@ -221,80 +221,85 @@ const handleClearNotification = async (notifId) => {
                             )}
                         </div>
 
-                        {showNotifications && (
-    <div className="absolute right-0 mt-4 w-80 bg-[#121214] border border-white/10 rounded-2xl shadow-2xl p-4 z-50">
-        <h3 className="font-bold text-sm mb-3">Signals</h3>
-        <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2">
-            
-            {/* 1. EMPTY STATE */}
-            {totalNotifications === 0 && (
-                <p className="text-xs text-gray-500 text-center py-4">No pending signals.</p>
-            )}
+                        {/* NOTIFICATIONS WIDGET (Restored Bell Button) */}
+<div className="relative" ref={notifRef}>
+    {/* 🟢 THIS BUTTON WAS MISSING */}
+    <button 
+        onClick={() => { setShowNotifications(!showNotifications); setShowCalendar(false); }} 
+        className={`p-2 rounded-full transition-all relative ${showNotifications ? 'text-purple-400 bg-purple-500/10' : 'text-gray-400 hover:text-white'}`}
+    >
+        <Bell size={20} />
+        {totalNotifications > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />}
+    </button>
 
-            {/* 2. POD INVITES LIST (From 'notifications' state) */}
-            {notifications.map((n, i) => (
-                <div key={n._id || i} className="p-3 rounded-xl bg-white/5 border border-white/5 mb-2">
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold text-white">
-                            {n.senderName ? n.senderName[0] : 'I'}
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-white">{n.senderName}</p>
-                            <p className="text-[10px] text-gray-500">{n.message}</p>
-                        </div>
-                    </div>
-                    
-                    <div className="flex gap-2">
-                        {/* JOIN BUTTON */}
-                        <button 
-                            onClick={() => {
-                                setShowNotifications(false);
-                                handleClearNotification(n._id); // Auto-Delete on Join
-                                navigate('/study-rooms', { state: { autoJoin: true, podData: n.data } }); 
-                            }} 
-                            className="flex-1 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-all"
-                        >
-                            <Rocket size={12} /> Join
-                        </button>
+    {/* DROPDOWN PANEL */}
+    {showNotifications && (
+        <div className="absolute right-0 mt-4 w-80 bg-[#121214] border border-white/10 rounded-2xl shadow-2xl p-4 z-50">
+            <h3 className="font-bold text-sm mb-3">Signals</h3>
+            <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2">
+                
+                {/* 1. EMPTY STATE */}
+                {totalNotifications === 0 && (
+                    <p className="text-xs text-gray-500 text-center py-4">No pending signals.</p>
+                )}
 
-                        {/* IGNORE BUTTON */}
-                        <button 
-                            onClick={() => handleClearNotification(n._id)} 
-                            className="px-3 py-1.5 bg-white/10 hover:bg-red-500/20 hover:text-red-400 text-gray-400 text-xs font-bold rounded-lg transition-all"
-                            title="Ignore Request"
-                        >
-                            <X size={12} />
-                        </button>
-                    </div>
-                </div>
-            ))}
-
-            {/* 3. CONNECTION REQUESTS LIST (From 'requests' state) */}
-            {requests.map(r => (
-                <div key={r._id} className="p-3 rounded-xl bg-white/5 flex items-center justify-between border border-white/5 mb-2">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white">
-                            {r.fullName ? r.fullName[0] : 'U'}
+                {/* 2. POD INVITES LIST */}
+                {notifications.map((n, i) => (
+                    <div key={n._id || i} className="p-3 rounded-xl bg-white/5 border border-white/5 mb-2">
+                        <div className="flex items-center gap-2 mb-2">
+                            <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold text-white">
+                                {n.senderName ? n.senderName[0] : 'I'}
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-white">{n.senderName}</p>
+                                <p className="text-[10px] text-gray-500">{n.message}</p>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-xs font-bold text-white">{r.fullName}</p>
-                            <p className="text-[10px] text-gray-500">Connection Request</p>
+                        
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => {
+                                    setShowNotifications(false);
+                                    handleClearNotification(n._id);
+                                    navigate('/study-rooms', { state: { autoJoin: true, podData: n.data } }); 
+                                }} 
+                                className="flex-1 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-all"
+                            >
+                                <Rocket size={12} /> Join
+                            </button>
+                            <button onClick={() => handleClearNotification(n._id)} className="px-3 py-1.5 bg-white/10 hover:bg-red-500/20 hover:text-red-400 text-gray-400 text-xs font-bold rounded-lg transition-all">
+                                <X size={12} />
+                            </button>
                         </div>
                     </div>
-                    <div className="flex gap-1">
-                        <button onClick={() => handleAccept(r._id)} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-black transition-all">
-                            <Check size={14} />
-                        </button>
-                        <button onClick={() => handleReject(r._id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-all">
-                            <X size={14} />
-                        </button>
-                    </div>
-                </div>
-            ))}
+                ))}
 
+                {/* 3. CONNECTION REQUESTS LIST */}
+                {requests.map(r => (
+                    <div key={r._id} className="p-3 rounded-xl bg-white/5 flex items-center justify-between border border-white/5 mb-2">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white">
+                                {r.fullName ? r.fullName[0] : 'U'}
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-white">{r.fullName}</p>
+                                <p className="text-[10px] text-gray-500">Connection Request</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-1">
+                            <button onClick={() => handleAccept(r._id)} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-black transition-all">
+                                <Check size={14} />
+                            </button>
+                            <button onClick={() => handleReject(r._id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-all">
+                                <X size={14} />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
-    </div>
-)}
+    )}
+</div>
                         <Link to="/profile" className="flex items-center gap-3 pl-4 border-l border-white/10">
                             <div className="text-right hidden sm:block">
                                 <p className="text-sm font-bold text-white leading-none">{user.name}</p>
