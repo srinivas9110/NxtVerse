@@ -164,21 +164,4 @@ router.get('/active-count', async (req, res) => {
     }
 });
 
-// 🟢 DELETE NOTIFICATION ROUTE
-// @route   DELETE /api/auth/notifications/:id
-router.delete('/notifications/:id', fetchUser, async (req, res) => {
-    try {
-        // Use $pull to remove the specific object from the array
-        const user = await User.findByIdAndUpdate(
-            req.user.id, 
-            { $pull: { notifications: { _id: req.params.id } } },
-            { new: true }
-        );
-        res.json({ success: true, notifications: user.notifications });
-    } catch (err) {
-        console.error("Delete Notification Error:", err);
-        res.status(500).send("Server Error");
-    }
-});
-
 module.exports = router;
