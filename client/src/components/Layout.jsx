@@ -17,10 +17,9 @@ export default function Layout() {
     // States
     const [user, setUser] = useState({ name: "Student", section: "...", role: "student", profilePic: null});
     const [requests, setRequests] = useState([]);
+    const [notifications, setNotifications] = useState([]); // 🟢 NEW State
     const [calendarEvents, setCalendarEvents] = useState([]);
-
-    // 🟢 REAL-TIME ACTIVITY STATE
-    const [activeUsers, setActiveUsers] = useState(1); // Default to 1 (yourself)
+    const [activeUsers, setActiveUsers] = useState(1);
 
     // Calendar Form State
     const [newEvent, setNewEvent] = useState({ title: '', date: '' });
@@ -31,19 +30,14 @@ export default function Layout() {
     const [showNotifications, setShowNotifications] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-    // Live Pulse Messages
+    // Pulse
     const [pulseIndex, setPulseIndex] = useState(0);
-    // 🟢 DYNAMIC PULSE MESSAGES
-    const pulseMessages = [
-        "NxtVerse Networking",
-        `${activeUsers} PEERS ACTIVE`,
-        "Digital Campus",
-    ];
+    const pulseMessages = ["NxtVerse Networking", `${activeUsers} PEERS ACTIVE`, "Digital Campus"];
 
     const calendarRef = useRef(null);
     const notifRef = useRef(null);
 
-    // --- EFFECTS ---
+    // Effects
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (calendarRef.current && !calendarRef.current.contains(event.target)) setShowCalendar(false);
@@ -53,46 +47,44 @@ export default function Layout() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // Pulse Animation Interval
     useEffect(() => {
         const interval = setInterval(() => setPulseIndex(p => (p + 1) % pulseMessages.length), 4000);
         return () => clearInterval(interval);
     }, [pulseMessages.length]); 
 
-    // 🟢 DATA FETCHING & HEARTBEAT
+    // DATA FETCHING
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (token) {
-            // 1. Get User Data
-            axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } })
-                .then(res => setUser({ name: res.data.fullName, section: res.data.section || "S1", role: res.data.role, profilePic: res.data.profilePic }))
-                .catch(() => { });
+            // 1. Get User Data (Includes Notifications)
+            const fetchUserData = () => {
+                axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } })
+                    .then(res => {
+                        setUser({ name: res.data.fullName, section: res.data.section || "S1", role: res.data.role, profilePic: res.data.profilePic });
+                        // 🟢 Load Notifications from User Object
+                        if(res.data.notifications) setNotifications(res.data.notifications.reverse());
+                    })
+                    .catch(() => { });
+            };
 
-            // 2. Fetch Notifications (Periodic)
+            // 2. Fetch Requests
             const fetchReqs = () => {
                 axios.get(`${API_URL}/api/users/requests/pending`, { headers: { "auth-token": token } })
                     .then(res => setRequests(res.data)).catch(() => { });
             };
 
-            // 3. Fetch Active Count (Real-Time Heartbeat)
             const fetchActiveCount = () => {
-                axios.get(`${API_URL}/api/auth/active-count`)
-                    .then(res => setActiveUsers(res.data.count))
-                    .catch(() => { });
+                axios.get(`${API_URL}/api/auth/active-count`).then(res => setActiveUsers(res.data.count)).catch(() => { });
             };
 
-            // Initial Calls
+            fetchUserData();
             fetchReqs();
             fetchActiveCount();
 
-            // Intervals
-            const reqInterval = setInterval(fetchReqs, 10000);
+            const reqInterval = setInterval(() => { fetchReqs(); fetchUserData(); }, 10000);
             const countInterval = setInterval(fetchActiveCount, 30000);
 
-            return () => {
-                clearInterval(reqInterval);
-                clearInterval(countInterval);
-            };
+            return () => { clearInterval(reqInterval); clearInterval(countInterval); };
         }
     }, []);
 
@@ -104,7 +96,7 @@ export default function Layout() {
         }
     }, [showCalendar]);
 
-    // --- HANDLERS ---
+    // Handlers
     const handleAccept = async (id) => {
         const token = localStorage.getItem('token');
         await axios.post(`${API_URL}/api/users/accept/${id}`, {}, { headers: { "auth-token": token } });
@@ -133,16 +125,13 @@ export default function Layout() {
     };
 
     const isActive = (path) => location.pathname === path;
+    const getImg = (path) => (!path ? null : (path.startsWith('http') ? path : `${API_URL}${path}`));
 
-    const getImg = (path) => {
-        if (!path) return null;
-        return (path.startsWith('http') || path.startsWith('blob')) ? path : `${API_URL}${path}`;
-    };
+    // Combine for Counter
+    const totalNotifications = requests.length + notifications.length;
 
     return (
         <div className="flex min-h-screen bg-[#050505] text-white font-sans selection:bg-purple-500/30 hide-scrollbar">
-
-            {/* SIDEBAR */}
             <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#09090b] border-r border-white/5 transform transition-transform duration-300 md:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 <div className="h-16 flex items-center gap-3 px-6 border-b border-white/5">
                     <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
@@ -151,7 +140,6 @@ export default function Layout() {
                     <span className="font-bold text-lg tracking-tight">NxtVerse</span>
                     <button onClick={() => setMobileMenuOpen(false)} className="md:hidden ml-auto text-gray-500"><X size={20} /></button>
                 </div>
-
                 <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100vh-8rem)] hide-scrollbar">
                     <NavItem to="/dashboard" icon={<LayoutGrid size={18} />} label="Lobby" active={isActive('/dashboard')} />
                     <NavItem to="/network" icon={<Users size={18} />} label="Peers" active={isActive('/network')} />
@@ -166,7 +154,6 @@ export default function Layout() {
                     <div className="my-4 h-px bg-white/5" />
                     <NavItem to="/profile" icon={<User size={18} />} label="Profile" active={isActive('/profile')} />
                 </nav>
-
                 <div className="absolute bottom-0 w-full p-4 border-t border-white/5 bg-[#09090b]">
                     <button onClick={() => { localStorage.removeItem('token'); navigate('/login'); }} className="flex items-center gap-3 text-gray-400 hover:text-red-400 w-full px-3 py-2 rounded-lg transition-colors">
                         <LogOut size={18} /> <span className="text-sm font-medium">Logout Verse</span>
@@ -174,28 +161,15 @@ export default function Layout() {
                 </div>
             </aside>
 
-            {/* MAIN CONTENT */}
             <div className="flex-1 md:ml-64 flex flex-col min-h-screen">
-
-                {/* HEADER */}
                 <div className="h-16 bg-[#050505]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/5 flex items-center justify-between px-4 md:px-8">
-                    
-                    {/* LEFT SIDE: Mobile Menu + Pulse */}
                     <div className="flex items-center gap-4">
                         <button onClick={() => setMobileMenuOpen(true)} className="md:hidden text-gray-400"><Menu size={24} /></button>
-
-                        {/* 🟢 LIVE PULSE WIDGET (Hidden on Mobile to prevent overlap) */}
                         <div className="hidden md:flex items-center gap-3 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full">
                             <div className="w-2 h-2 bg-[#6b21a8] rounded-full animate-pulse shadow-[0_0_8px_#a855f7]" />
                             <div className="overflow-hidden h-4 w-32 relative">
                                 <AnimatePresence mode="wait">
-                                    <motion.span
-                                        key={pulseIndex}
-                                        initial={{ y: 10, opacity: 0 }}
-                                        animate={{ y: 0, opacity: 1 }}
-                                        exit={{ y: -10, opacity: 0 }}
-                                        className="absolute inset-0 flex items-center text-[10px] font-mono font-bold text-gray-300 tracking-widest"
-                                    >
+                                    <motion.span key={pulseIndex} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }} className="absolute inset-0 flex items-center text-[10px] font-mono font-bold text-gray-300 tracking-widest">
                                         {pulseMessages[pulseIndex]}
                                     </motion.span>
                                 </AnimatePresence>
@@ -203,37 +177,32 @@ export default function Layout() {
                         </div>
                     </div>
 
-                    {/* RIGHT SIDE: Widgets + Profile */}
                     <div className="flex items-center gap-4 ml-auto">
-                        
-                        {/* CALENDAR WIDGET */}
                         <div className="relative" ref={calendarRef}>
                             <button onClick={() => { setShowCalendar(!showCalendar); setShowNotifications(false); }} className={`p-2 rounded-full transition-all ${showCalendar ? 'text-purple-400 bg-purple-500/10' : 'text-gray-400 hover:text-white'}`}>
                                 <Calendar size={20} />
                             </button>
                             {showCalendar && (
                                 <div className="absolute right-0 mt-4 w-80 bg-[#121214] border border-white/10 rounded-2xl shadow-2xl p-4 z-50 overflow-hidden">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h3 className="font-bold text-sm text-white">Calendar</h3>
-                                    </div>
+                                    <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-sm text-white">Calendar</h3></div>
                                     <div className="flex p-1 bg-white/5 rounded-lg mb-4">
-                                        <button onClick={() => setCalendarTab('academic')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${calendarTab === 'academic' ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/20' : 'text-gray-500 hover:text-white'}`}>Academic</button>
-                                        <button onClick={() => setCalendarTab('non-academic')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${calendarTab === 'non-academic' ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/20' : 'text-gray-500 hover:text-white'}`}>Non-Academic</button>
+                                        <button onClick={() => setCalendarTab('academic')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${calendarTab === 'academic' ? 'bg-purple-600 text-white' : 'text-gray-500'}`}>Academic</button>
+                                        <button onClick={() => setCalendarTab('non-academic')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${calendarTab === 'non-academic' ? 'bg-purple-600 text-white' : 'text-gray-500'}`}>Non-Academic</button>
                                     </div>
                                     {user.role === 'faculty' && (
                                         <div className="mb-4 space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
-                                            <input placeholder={`New ${calendarTab === 'academic' ? 'Acad' : 'Non-Acad'} Event`} className="w-full bg-black/40 p-2 rounded text-xs text-white border border-white/10 outline-none focus:border-purple-500 transition-colors" value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} />
+                                            <input placeholder="Event Title" className="w-full bg-black/40 p-2 rounded text-xs text-white border border-white/10 outline-none focus:border-purple-500" value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} />
                                             <div className="flex gap-2">
-                                                <input type="date" className="bg-black/40 p-1.5 rounded text-xs text-white border border-white/10 outline-none flex-1 focus:border-purple-500 transition-colors" value={newEvent.date} onChange={e => setNewEvent({ ...newEvent, date: e.target.value })} />
-                                                <button onClick={handleAddEvent} className="bg-purple-600 hover:bg-purple-500 text-white px-3 rounded text-xs font-bold transition-colors"><Plus size={14} /></button>
+                                                <input type="date" className="bg-black/40 p-1.5 rounded text-xs text-white border border-white/10 outline-none flex-1" value={newEvent.date} onChange={e => setNewEvent({ ...newEvent, date: e.target.value })} />
+                                                <button onClick={handleAddEvent} className="bg-purple-600 text-white px-3 rounded text-xs font-bold"><Plus size={14} /></button>
                                             </div>
                                         </div>
                                     )}
                                     <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2">
-                                        {calendarEvents.filter(e => e.type === calendarTab).length === 0 ? <p className="text-xs text-gray-500 text-center py-6">No {calendarTab} events.</p> : calendarEvents.filter(e => e.type === calendarTab).map(e => (
-                                            <div key={e._id} className="p-3 rounded-xl bg-white/5 flex justify-between group border border-transparent hover:border-white/10 transition-colors">
+                                        {calendarEvents.filter(e => e.type === calendarTab).map(e => (
+                                            <div key={e._id} className="p-3 rounded-xl bg-white/5 flex justify-between group hover:border-white/10">
                                                 <div><p className="text-xs font-bold text-white">{e.title}</p><p className="text-[10px] text-gray-500 font-mono mt-0.5">{new Date(e.date).toLocaleDateString()}</p></div>
-                                                {user.role === 'faculty' && <button onClick={() => handleDeleteEvent(e._id)} className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"><Trash2 size={14} /></button>}
+                                                {user.role === 'faculty' && <button onClick={() => handleDeleteEvent(e._id)} className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 size={14} /></button>}
                                             </div>
                                         ))}
                                     </div>
@@ -242,71 +211,49 @@ export default function Layout() {
                         </div>
 
                         {/* NOTIFICATIONS WIDGET */}
-<div className="relative" ref={notifRef}>
-    <button onClick={() => { setShowNotifications(!showNotifications); setShowCalendar(false); }} className={`p-2 rounded-full transition-all relative ${showNotifications ? 'text-purple-400 bg-purple-500/10' : 'text-gray-400 hover:text-white'}`}>
-        <Bell size={20} />
-        {requests.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />}
-    </button>
-    
-    {showNotifications && (
-        <div className="absolute right-0 mt-4 w-80 bg-[#121214] border border-white/10 rounded-2xl shadow-2xl p-4 z-50">
-            <h3 className="font-bold text-sm mb-3">Signals</h3>
-            <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2">
-                {requests.length === 0 ? <p className="text-xs text-gray-500 text-center py-4">No pending signals.</p> : requests.map((r, index) => (
-                    <div key={r._id || index} className="p-3 rounded-xl bg-white/5 flex items-center justify-between">
-                        
-                        {/* 🟢 CASE 1: POD INVITE */}
-                        {r.type === 'pod_invite' ? (
-                            <div className="w-full">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold text-white">
-                                        {r.senderName ? r.senderName[0] : 'P'}
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-bold text-white">{r.senderName}</p>
-                                        <p className="text-[10px] text-gray-500">{r.message}</p>
-                                    </div>
-                                </div>
-                                <button 
-                                    onClick={() => {
-                                        setShowNotifications(false);
-                                        // 🚀 Navigate with Data to Auto-Join
-                                        navigate('/study-rooms', { 
-                                            state: { autoJoin: true, podData: r.data } 
-                                        });
-                                        // Optional: Add logic here to delete notification after clicking
-                                    }}
-                                    className="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-all"
-                                >
-                                    <Rocket size={12} /> Join Pod Now
-                                </button>
-                            </div>
-                        ) : (
-                            /* 🟢 CASE 2: CONNECTION REQUEST (Existing Logic) */
-                            <>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white">
-                                        {r.fullName ? r.fullName[0] : 'U'}
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-bold text-white">{r.fullName}</p>
-                                        <p className="text-[10px] text-gray-500">Requesting connection</p>
+                        <div className="relative" ref={notifRef}>
+                            <button onClick={() => { setShowNotifications(!showNotifications); setShowCalendar(false); }} className={`p-2 rounded-full transition-all relative ${showNotifications ? 'text-purple-400 bg-purple-500/10' : 'text-gray-400 hover:text-white'}`}>
+                                <Bell size={20} />
+                                {totalNotifications > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />}
+                            </button>
+                            {showNotifications && (
+                                <div className="absolute right-0 mt-4 w-80 bg-[#121214] border border-white/10 rounded-2xl shadow-2xl p-4 z-50">
+                                    <h3 className="font-bold text-sm mb-3">Signals</h3>
+                                    <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2">
+                                        {totalNotifications === 0 ? <p className="text-xs text-gray-500 text-center py-4">No pending signals.</p> : (
+                                            <>
+                                                {/* 🟢 POD INVITES */}
+                                                {notifications.map((n, i) => (
+                                                    <div key={i} className="p-3 rounded-xl bg-white/5 border border-white/5">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold text-white">{n.senderName ? n.senderName[0] : 'I'}</div>
+                                                            <div><p className="text-xs font-bold text-white">{n.senderName}</p><p className="text-[10px] text-gray-500">{n.message}</p></div>
+                                                        </div>
+                                                        <button onClick={() => { setShowNotifications(false); navigate('/study-rooms', { state: { autoJoin: true, podData: n.data } }); }} className="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2">
+                                                            <Rocket size={12} /> Join Pod Now
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                {/* CONNECTION REQUESTS */}
+                                                {requests.map(r => (
+                                                    <div key={r._id} className="p-3 rounded-xl bg-white/5 flex items-center justify-between border border-white/5">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white">{r.fullName[0]}</div>
+                                                            <div><p className="text-xs font-bold text-white">{r.fullName}</p><p className="text-[10px] text-gray-500">Connection Request</p></div>
+                                                        </div>
+                                                        <div className="flex gap-1">
+                                                            <button onClick={() => handleAccept(r._id)} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-black"><Check size={14} /></button>
+                                                            <button onClick={() => handleReject(r._id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><X size={14} /></button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="flex gap-1">
-                                    <button onClick={() => handleAccept(r._id)} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-black"><Check size={14} /></button>
-                                    <button onClick={() => handleReject(r._id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><X size={14} /></button>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                ))}
-            </div>
-        </div>
-    )}
-</div>
+                            )}
+                        </div>
 
-                        {/* PROFILE LINK */}
                         <Link to="/profile" className="flex items-center gap-3 pl-4 border-l border-white/10">
                             <div className="text-right hidden sm:block">
                                 <p className="text-sm font-bold text-white leading-none">{user.name}</p>
@@ -314,21 +261,13 @@ export default function Layout() {
                             </div>
                             <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 p-[2px]">
                                 <div className="w-full h-full rounded-full bg-[#050505] flex items-center justify-center font-bold text-xs overflow-hidden">
-                                    {/* 🟢 CHECK: Show Image if exists, else show Initial */}
-                                    {user.profilePic ? (
-                                        <img src={getImg(user.profilePic)} alt="profile" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <span className="text-white">{user.name.charAt(0)}</span>
-                                    )}
+                                    {user.profilePic ? <img src={getImg(user.profilePic)} alt="profile" className="w-full h-full object-cover" /> : <span className="text-white">{user.name.charAt(0)}</span>}
                                 </div>
                             </div>
                         </Link>
                     </div>
                 </div>
-
-                <main className="flex-1 overflow-x-hidden">
-                    <Outlet />
-                </main>
+                <main className="flex-1 overflow-x-hidden"><Outlet /></main>
             </div>
         </div>
     );

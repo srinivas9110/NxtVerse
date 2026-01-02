@@ -10,7 +10,7 @@ const UserSchema = new mongoose.Schema({
     role: { type: String, enum: ['student', 'faculty', 'admin'], default: 'student' },
     lastActive: { type: Date, default: Date.now },
 
-    // 🟢 NEW: Track Leadership Status
+    // 🟢 NEW: Leadership Flag (Fixes Badge Issue)
     isPresident: { type: Boolean, default: false },
 
     // Gamification
@@ -24,6 +24,17 @@ const UserSchema = new mongoose.Schema({
     connections: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     requestsReceived: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     requestsSent: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+
+    // 🟢 NEW: Notifications System (Fixes the Invite Error)
+    notifications: [{
+        type: { type: String }, // 'pod_invite', 'system', etc.
+        senderName: String,
+        senderId: mongoose.Schema.Types.ObjectId,
+        message: String,
+        data: Object, // Stores podId, roomId, passcode
+        timestamp: { type: Date, default: Date.now },
+        read: { type: Boolean, default: false }
+    }],
 
     // Profile
     bio: { type: String, default: "Computer Science Enthusiast | NxtVerse Member" },
@@ -52,31 +63,18 @@ const UserSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
-// 🟢 VIRTUAL: Calculate Unlocked Badges Dynamically
+// 🟢 VIRTUAL: Calculate Unlocked Badges
 UserSchema.virtual('unlockedBadges').get(function() {
     const unlocked = [];
-
-    // 1. Architect (Level 5+)
     if (this.level >= 5) unlocked.push('architect');
-
-    // 2. High Scholar (XP > 1000)
     if (this.xp > 1000) unlocked.push('high-scholar');
-
-    // 3. Apex Leader (Faculty OR President) 🟢
-    if (this.role === 'faculty' || this.isPresident) {
-        unlocked.push('apex-leader');
-    }
-
-    // 4. Open Source (Has GitHub)
+    // 🟢 Logic for Apex Leader Badge
+    if (this.role === 'faculty' || this.isPresident) unlocked.push('apex-leader');
     if (this.links && this.links.github) unlocked.push('open-source');
-
-    // 5. Node Linker (Has LinkedIn/Portfolio)
     if (this.links && this.links.portfolio) unlocked.push('node-linker');
-
     return unlocked;
 });
 
-// Ensure virtuals are included when converting to JSON
 UserSchema.set('toJSON', { virtuals: true });
 UserSchema.set('toObject', { virtuals: true });
 

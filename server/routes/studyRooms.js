@@ -133,7 +133,7 @@ router.put('/update/:id', fetchUser, async (req, res) => {
 });
 
 // @route   POST /api/studyrooms/invite
-// @desc    Invite a user to the pod (Host Only)
+// @desc    Invite a user to the pod
 router.post('/invite', fetchUser, async (req, res) => {
     try {
         const { targetUserId, podId } = req.body;
@@ -143,27 +143,23 @@ router.post('/invite', fetchUser, async (req, res) => {
         const pod = await StudyRoom.findById(podId);
         if (!pod) return res.status(404).json({ error: "Pod not found" });
 
-        // 🟢 Create a Smart Notification Object
         const notification = {
-            type: 'pod_invite', // This separates it from connection requests
-            senderName: host.fullName, // Explicitly send name for the UI
+            type: 'pod_invite',
+            senderName: host.fullName,
             senderId: host._id,
             message: `Invited you to join '${pod.name}'`,
             data: { 
                 podId: pod._id, 
                 roomId: pod.roomId,
                 isPrivate: pod.isPrivate,
-                passcode: pod.passcode // 🤫 Send key so they don't need to type it
+                passcode: pod.passcode 
             },
             timestamp: new Date()
         };
 
-        // Push to Target User's Notification/Requests array
-        // Note: We interpret 'requestsReceived' broadly here to include invites
-        // Or better, use a 'notifications' array if your User model has it. 
-        // For now, assuming you might want to mix them or have a notifications field:
+        // 🟢 FIX: Push to 'notifications', not 'requestsReceived'
         await User.findByIdAndUpdate(targetUserId, {
-            $push: { requestsReceived: notification } // Or $push: { notifications: notification } if you separate them
+            $push: { notifications: notification } 
         });
 
         res.json({ success: "Invitation sent" });
