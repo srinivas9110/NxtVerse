@@ -144,4 +144,18 @@ router.get('/requests/pending', fetchUser, async (req, res) => {
     }
 });
 
+// @route   DELETE /api/auth/notifications/:id
+// @desc    Remove a specific notification
+router.delete('/notifications/:id', fetchUser, async (req, res) => {
+    try {
+        await User.findByIdAndUpdate(req.user.id, {
+            $pull: { notifications: { _id: req.params.id } }
+        });
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Server Error");
+    }
+});
+
 module.exports = router;

@@ -299,27 +299,33 @@ export default function StudyRooms() {
     };
 
     const leavePod = async () => {
-        if (!window.confirm("Leaving already?")) return;
+    if (!window.confirm("Leaving already?")) return;
 
-        const token = localStorage.getItem('token');
-        try {
-            await axios.put(`${API_URL}/api/studyrooms/leave/${activePod._id}`, {}, { headers: { "auth-token": token } });
-        } catch (err) { console.error("Leave error", err); }
+    const token = localStorage.getItem('token');
+    try {
+        await axios.put(`${API_URL}/api/studyrooms/leave/${activePod._id}`, {}, { headers: { "auth-token": token } });
+    } catch (err) { console.error("Leave error", err); }
 
-        localStorage.removeItem('activePodId');
-        localStorage.removeItem('activePodGoal');
+    // Clear Local Storage
+    localStorage.removeItem('activePodId');
+    localStorage.removeItem('activePodGoal');
 
-        setActivePod(null);
-        setSessionGoal("");
-        setTimer(25 * 60);
-        setIsTimerRunning(false);
-        setIsRadioPlaying(false);
-        audioRef.current.pause();
-        setMeetingLoaded(false);
-        
-        const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
-        setRooms(roomRes.data);
-    };
+    // Reset Local State
+    setActivePod(null);
+    setSessionGoal("");
+    setTimer(25 * 60);
+    setIsTimerRunning(false);
+    setIsRadioPlaying(false);
+    audioRef.current.pause();
+    setMeetingLoaded(false);
+    
+    // 🟢 CRITICAL FIX: Clear the router state to prevent Auto-Join loop
+    navigate('/study-rooms', { replace: true, state: {} });
+
+    // Refresh Room List
+    const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
+    setRooms(roomRes.data);
+};
 
     const formatTime = (seconds) => {
         const m = Math.floor(seconds / 60);
