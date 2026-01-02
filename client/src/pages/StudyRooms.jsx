@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
 import axios from 'axios';
-import { useNavigate, useLocation } from 'react-router-dom'; // 🟢 Add useLocation
 import { JitsiMeeting } from '@jitsi/react-sdk';
 import {
     Zap, Users, Clock, Plus, X, Monitor,
     Headphones, Play, Pause, LogOut, Target,
     Trash2, Volume2, Timer, Wifi, Lock, Key,
-    ChevronRight, ChevronLeft, Settings, Save, CheckCircle, UserPlus, Send, RefreshCw
+    ChevronRight, ChevronLeft, Settings, Save, CheckCircle, UserPlus, Send, RefreshCw, Rocket
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+// 🟢 FIXED IMPORTS: Consolidated into one line
+import { useNavigate, useLocation } from 'react-router-dom';
 
 // 🎵 Free Lo-Fi Stream URL
 const LOFI_STREAM_URL = "https://stream.zeno.fm/0r0xa792kwzuv";
@@ -29,6 +29,7 @@ const NeuralLoader = () => (
 
 export default function StudyRooms() {
     const navigate = useNavigate();
+    const location = useLocation(); // 🟢 Hook for receiving invite data
 
     // Data States
     const [rooms, setRooms] = useState([]);
@@ -66,86 +67,7 @@ export default function StudyRooms() {
         isPrivate: false, passcode: ''
     });
 
-    const location = useLocation();
-
     const audioRef = useRef(new Audio(LOFI_STREAM_URL));
-
-    // 1. Fetch Data
-    useEffect(() => {
-        const init = async () => {
-            const token = localStorage.getItem('token');
-            if (!token) { navigate('/login'); return; }
-            try {
-                // A. Get User
-                const userRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
-                setCurrentUser(userRes.data);
-
-                // B. Fetch Rooms
-                const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
-                const fetchedRooms = roomRes.data;
-                setRooms(fetchedRooms);
-
-                // C. Persistence Check
-                const savedPodId = localStorage.getItem('activePodId');
-                if (savedPodId) {
-                    const foundPod = fetchedRooms.find(r => r._id === savedPodId);
-                    if (foundPod && foundPod.status !== 'completed') {
-                        setActivePod(foundPod);
-                        setEditLimit(foundPod.maxParticipants);
-                        setSessionGoal(localStorage.getItem('activePodGoal') || "Focusing...");
-                        setIsTimerRunning(true);
-                        setMeetingLoaded(false); 
-                    } else {
-                        localStorage.removeItem('activePodId');
-                        localStorage.removeItem('activePodGoal');
-                    }
-                }
-                setLoading(false);
-            } catch (err) { console.error(err); }
-        };
-        init();
-    }, [navigate]);
-
-    // 🟢 NEW: Refresh Connections when Invite Modal Opens
-    useEffect(() => {
-        if (showInviteModal) {
-            const refreshConnections = async () => {
-                const token = localStorage.getItem('token');
-                try {
-                    // Fetch my latest data to get connection IDs
-                    const meRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
-                    const myConnIds = meRes.data.connections || [];
-                    
-                    // Fetch all users to map IDs to Names
-                    const allUsersRes = await axios.get(`${API_URL}/api/users/fetchall`, { headers: { "auth-token": token } });
-                    const myConns = allUsersRes.data.filter(u => myConnIds.includes(u._id));
-                    setConnections(myConns);
-                } catch (err) { console.error("Failed to refresh connections"); }
-            };
-            refreshConnections();
-        }
-    }, [showInviteModal]);
-
-    // 2. Timer Logic
-    useEffect(() => {
-        let interval = null;
-        if (isTimerRunning && timer > 0) {
-            interval = setInterval(() => setTimer(t => t - 1), 1000);
-        } else if (timer === 0) {
-            setIsTimerRunning(false);
-            alert("⏰ Focus Session Complete! Take a break.");
-        }
-        return () => clearInterval(interval);
-    }, [isTimerRunning, timer]);
-
-    const toggleRadio = () => {
-        if (isRadioPlaying) {
-            audioRef.current.pause();
-        } else {
-            audioRef.current.play().catch(e => console.log("Audio play failed", e));
-        }
-        setIsRadioPlaying(!isRadioPlaying);
-    };
 
     // 🟢 AUTO-JOIN LOGIC (Run when landing from Invite)
     useEffect(() => {
@@ -160,7 +82,6 @@ export default function StudyRooms() {
                 maxParticipants: 10,
                 creatorId: "unknown",
                 isPrivate: podData.isPrivate,
-                // We inject the passcode here so we don't need to ask for it
                 passcode: podData.passcode 
             });
 
@@ -188,7 +109,81 @@ export default function StudyRooms() {
         }
     }, [location, activePod]);
 
-    // 3. Room Actions
+    // 1. Fetch Data
+    useEffect(() => {
+        const init = async () => {
+            const token = localStorage.getItem('token');
+            if (!token) { navigate('/login'); return; }
+            try {
+                // A. Get User
+                const userRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
+                setCurrentUser(userRes.data);
+
+                // B. Fetch Rooms
+                const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
+                const fetchedRooms = roomRes.data;
+                setRooms(fetchedRooms);
+
+                // C. Persistence Check
+                const savedPodId = localStorage.getItem('activePodId');
+                if (savedPodId && !location.state?.autoJoin) { // Don't override auto-join
+                    const foundPod = fetchedRooms.find(r => r._id === savedPodId);
+                    if (foundPod && foundPod.status !== 'completed') {
+                        setActivePod(foundPod);
+                        setEditLimit(foundPod.maxParticipants);
+                        setSessionGoal(localStorage.getItem('activePodGoal') || "Focusing...");
+                        setIsTimerRunning(true);
+                        setMeetingLoaded(false); 
+                    } else {
+                        localStorage.removeItem('activePodId');
+                        localStorage.removeItem('activePodGoal');
+                    }
+                }
+                setLoading(false);
+            } catch (err) { console.error(err); }
+        };
+        init();
+    }, [navigate, location.state]);
+
+    // Refresh Connections when Invite Modal Opens
+    useEffect(() => {
+        if (showInviteModal) {
+            const refreshConnections = async () => {
+                const token = localStorage.getItem('token');
+                try {
+                    const meRes = await axios.get(`${API_URL}/api/auth/getuser`, { headers: { "auth-token": token } });
+                    const myConnIds = meRes.data.connections || [];
+                    const allUsersRes = await axios.get(`${API_URL}/api/users/fetchall`, { headers: { "auth-token": token } });
+                    const myConns = allUsersRes.data.filter(u => myConnIds.includes(u._id));
+                    setConnections(myConns);
+                } catch (err) { console.error("Failed to refresh connections"); }
+            };
+            refreshConnections();
+        }
+    }, [showInviteModal]);
+
+    // Timer Logic
+    useEffect(() => {
+        let interval = null;
+        if (isTimerRunning && timer > 0) {
+            interval = setInterval(() => setTimer(t => t - 1), 1000);
+        } else if (timer === 0) {
+            setIsTimerRunning(false);
+            alert("⏰ Focus Session Complete! Take a break.");
+        }
+        return () => clearInterval(interval);
+    }, [isTimerRunning, timer]);
+
+    const toggleRadio = () => {
+        if (isRadioPlaying) {
+            audioRef.current.pause();
+        } else {
+            audioRef.current.play().catch(e => console.log("Audio play failed", e));
+        }
+        setIsRadioPlaying(!isRadioPlaying);
+    };
+
+    // Room Actions
     const handleCreateRoom = async () => {
         if (!newRoom.name || !newRoom.subject) return alert("Fill all fields");
         if (newRoom.isPrivate && newRoom.passcode.length < 4) return alert("Passcode must be 4 digits");
@@ -196,10 +191,19 @@ export default function StudyRooms() {
 
         try {
             const token = localStorage.getItem('token');
-            await axios.post(`${API_URL}/api/studyrooms/create`, newRoom, { headers: { "auth-token": token } });
+            const res = await axios.post(`${API_URL}/api/studyrooms/create`, newRoom, { headers: { "auth-token": token } });
             setShowCreateModal(false);
             setNewRoom({ name: '', subject: '', maxParticipants: 5, duration: '1 hour', isPrivate: false, passcode: '' });
             
+            // Auto-join the creator
+            setActivePod(res.data);
+            setEditLimit(res.data.maxParticipants);
+            setSessionGoal("Hosting Focus Pod 👑");
+            setIsTimerRunning(true);
+            setMeetingLoaded(false);
+            localStorage.setItem('activePodId', res.data._id);
+            localStorage.setItem('activePodGoal', "Hosting Focus Pod 👑");
+
             const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
             setRooms(roomRes.data);
         } catch (err) { alert("Failed to create pod"); }
@@ -239,7 +243,7 @@ export default function StudyRooms() {
         } catch (err) { alert("Failed to end session"); }
     };
 
-    // 🟢 INVITE FRIEND (Backend Connected)
+    // INVITE FRIEND
     const handleInvite = async (userId) => {
         const token = localStorage.getItem('token');
         try {
@@ -248,14 +252,13 @@ export default function StudyRooms() {
                 { headers: { "auth-token": token } }
             );
             alert("✅ Invitation sent!");
-            // Optional: Close modal or keep open to invite more
         } catch (err) {
             console.error(err);
             alert("Failed to send invite");
         }
     };
 
-    // 4. Join Logic
+    // Join Logic
     const attemptJoin = (room) => {
         if (room.status === 'completed') return; 
         setSelectedRoom(room);
@@ -328,7 +331,7 @@ export default function StudyRooms() {
 
     // --- VIEW: ACTIVE FOCUS POD ---
     if (activePod) {
-        const isHost = currentUser._id === activePod.creatorId;
+        const isHost = currentUser?._id === activePod.creatorId;
 
         return (
             <div className="h-screen w-full bg-black flex overflow-hidden relative font-sans text-white">
@@ -361,7 +364,7 @@ export default function StudyRooms() {
                                 prejoinPageEnabled: false, theme: { default: 'dark', background: '#000000' },
                                 toolbarButtons: ['microphone', 'camera', 'desktop', 'fullscreen', 'chat', 'raisehand', 'tileview']
                             }}
-                            userInfo={{ displayName: `${currentUser.fullName}` }}
+                            userInfo={{ displayName: `${currentUser?.fullName}` }}
                             onApiReady={(externalApi) => {
                                 externalApi.addEventListener('videoConferenceJoined', () => setMeetingLoaded(true));
                                 setTimeout(() => setMeetingLoaded(true), 5000);
@@ -397,7 +400,7 @@ export default function StudyRooms() {
                                 </div>
                             </div>
 
-                            {/* 🟢 ACTION: INVITE (RESTRICTED TO HOST) */}
+                            {/* INVITE (HOST ONLY) */}
                             {isHost && (
                                 <button onClick={() => setShowInviteModal(true)} className="w-full py-3 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
                                     <UserPlus size={18} /> Invite Peers
@@ -566,6 +569,7 @@ export default function StudyRooms() {
                 )}
             </div>
 
+            {/* MODALS: CREATE & JOIN */}
             {showCreateModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-[#18181b] border border-white/10 p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
