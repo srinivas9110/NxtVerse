@@ -234,6 +234,9 @@ export default function StudyRooms() {
                 localStorage.removeItem('activePodGoal');
                 setActivePod(null);
                 setMeetingLoaded(false);
+                
+                // 🟢 CRITICAL FIX: Wipe state for host too
+                navigate('/study-rooms', { replace: true, state: null });
             }
             const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
             setRooms(roomRes.data);
@@ -300,12 +303,17 @@ export default function StudyRooms() {
 
         const token = localStorage.getItem('token');
         try {
-            await axios.put(`${API_URL}/api/studyrooms/leave/${activePod._id}`, {}, { headers: { "auth-token": token } });
+            // Backend call to remove user from active list
+            if (activePod?._id) {
+                await axios.put(`${API_URL}/api/studyrooms/leave/${activePod._id}`, {}, { headers: { "auth-token": token } });
+            }
         } catch (err) { console.error("Leave error", err); }
 
+        // Clear Local Storage
         localStorage.removeItem('activePodId');
         localStorage.removeItem('activePodGoal');
 
+        // Reset State
         setActivePod(null);
         setSessionGoal("");
         setTimer(25 * 60);
@@ -314,11 +322,15 @@ export default function StudyRooms() {
         audioRef.current.pause();
         setMeetingLoaded(false);
         
-        // 🟢 SAFETY: Explicitly navigate to the same page with NULL state
+        // 🟢 CRITICAL FIX: Wipe the navigation state so the loop stops
+        // "replace: true" prevents the user from clicking 'Back' into the meeting
         navigate('/study-rooms', { replace: true, state: null });
-        
-        const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
-        setRooms(roomRes.data);
+
+        // Refresh List
+        try {
+            const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
+            setRooms(roomRes.data);
+        } catch (e) { console.error(e); }
     };
 
     const formatTime = (seconds) => {
