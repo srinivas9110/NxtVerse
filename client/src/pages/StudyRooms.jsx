@@ -589,7 +589,7 @@ export default function StudyRooms() {
 
                         <JitsiMeeting
 
-                            domain="meet.jit.si"
+                            domain="jitsi.riot.im"
 
                             roomName={activePod.roomId}
 
