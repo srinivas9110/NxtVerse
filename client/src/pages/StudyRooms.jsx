@@ -69,12 +69,16 @@ export default function StudyRooms() {
 
     const audioRef = useRef(new Audio(LOFI_STREAM_URL));
 
-    // 🟢 AUTO-JOIN LOGIC (Run when landing from Invite)
+    // 🟢 AUTO-JOIN LOGIC (Fixed Loop Issue)
     useEffect(() => {
+        // Check if we have the AutoJoin flag AND if we aren't already in a pod
         if (location.state?.autoJoin && location.state?.podData && !activePod) {
             const { podData } = location.state;
             
-            // 1. Optimistic UI Set
+            // 1. Immediately wipe the history state so this doesn't run again on refresh/leave
+            window.history.replaceState({}, document.title);
+            
+            // 2. Optimistic UI Set
             setActivePod({
                 _id: podData.podId,
                 roomId: podData.roomId,
@@ -85,17 +89,13 @@ export default function StudyRooms() {
                 passcode: podData.passcode 
             });
 
-            // 2. Set Session Defaults
+            // 3. Set Session Defaults
             setEditLimit(10);
             setIsTimerRunning(true);
             setSessionGoal("Joined via Invite 🚀"); 
             setMeetingLoaded(false);
 
-            // 3. Persist so reload works
-            localStorage.setItem('activePodId', podData.podId);
-            localStorage.setItem('activePodGoal', "Joined via Invite 🚀");
-
-            // 4. Backend Handshake (Add user to active list)
+            // 4. Backend Handshake
             const joinBackend = async () => {
                 const token = localStorage.getItem('token');
                 try {
@@ -103,9 +103,6 @@ export default function StudyRooms() {
                 } catch (e) { console.error("Auto-join API failed", e); }
             };
             joinBackend();
-
-            // 5. Clean URL state
-            window.history.replaceState({}, document.title);
         }
     }, [location, activePod]);
 
@@ -299,33 +296,30 @@ export default function StudyRooms() {
     };
 
     const leavePod = async () => {
-    if (!window.confirm("Leaving already?")) return;
+        if (!window.confirm("Leaving already?")) return;
 
-    const token = localStorage.getItem('token');
-    try {
-        await axios.put(`${API_URL}/api/studyrooms/leave/${activePod._id}`, {}, { headers: { "auth-token": token } });
-    } catch (err) { console.error("Leave error", err); }
+        const token = localStorage.getItem('token');
+        try {
+            await axios.put(`${API_URL}/api/studyrooms/leave/${activePod._id}`, {}, { headers: { "auth-token": token } });
+        } catch (err) { console.error("Leave error", err); }
 
-    // Clear Local Storage
-    localStorage.removeItem('activePodId');
-    localStorage.removeItem('activePodGoal');
+        localStorage.removeItem('activePodId');
+        localStorage.removeItem('activePodGoal');
 
-    // Reset Local State
-    setActivePod(null);
-    setSessionGoal("");
-    setTimer(25 * 60);
-    setIsTimerRunning(false);
-    setIsRadioPlaying(false);
-    audioRef.current.pause();
-    setMeetingLoaded(false);
-    
-    // 🟢 CRITICAL FIX: Clear the router state to prevent Auto-Join loop
-    navigate('/study-rooms', { replace: true, state: {} });
-
-    // Refresh Room List
-    const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
-    setRooms(roomRes.data);
-};
+        setActivePod(null);
+        setSessionGoal("");
+        setTimer(25 * 60);
+        setIsTimerRunning(false);
+        setIsRadioPlaying(false);
+        audioRef.current.pause();
+        setMeetingLoaded(false);
+        
+        // 🟢 SAFETY: Explicitly navigate to the same page with NULL state
+        navigate('/study-rooms', { replace: true, state: null });
+        
+        const roomRes = await axios.get(`${API_URL}/api/studyrooms/fetchall`, { headers: { "auth-token": token } });
+        setRooms(roomRes.data);
+    };
 
     const formatTime = (seconds) => {
         const m = Math.floor(seconds / 60);
